@@ -1,13 +1,15 @@
 from typing import Any
 
-from app.core.database import supabase
 from app.core.config import DEFAULT_USER_ID
+from app.core.database import supabase
+from app.models.chat import DEFAULT_SESSION_TITLE
+from app.services.consultation_report_service import generate_consultation_report
 from app.services.gemma_service import (
     chat_reply,
     extract_requirements_from_conversation,
 )
-from app.services.consultation_report_service import generate_consultation_report
 from app.services.image_service import generate_booth_image
+
 from app.services.budget_service import calculate_budget
 
 REQUIRED_FIELDS = [
@@ -19,7 +21,6 @@ REQUIRED_FIELDS = [
     "location",
 ]
 
-DEFAULT_SESSION_TITLE = "New Booth Consultation"
 AUTO_TITLE_PLACEHOLDERS = {
     "",
     DEFAULT_SESSION_TITLE,

@@ -93,34 +93,6 @@ def _last_assistant_message(messages: list[dict]) -> str:
     return ""
 
 
-def merge_requirements(current: dict, extracted: dict) -> dict:
-    merged = {**current}
-
-    for field in REQUIREMENT_FIELDS:
-        if field not in extracted:
-            continue
-
-        value = extracted[field]
-
-        if field == "special_requirements":
-            if value is not None:
-                merged[field] = value
-            continue
-
-        if value is not None and value != "":
-            if field == "budget":
-                try:
-                    merged[field] = int(
-                        str(value).replace(",", "").replace(" ", "")
-                    )
-                except (TypeError, ValueError):
-                    pass
-            else:
-                merged[field] = str(value).strip()
-
-    return _sanitize_requirements(merged)
-
-
 def _sanitize_requirements(requirements: dict) -> dict:
     budget = requirements.get("budget")
     booth_size = requirements.get("booth_size") or ""

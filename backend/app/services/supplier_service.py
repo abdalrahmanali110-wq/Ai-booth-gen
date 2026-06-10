@@ -126,17 +126,3 @@ def get_curated_suppliers_for_budget(
         "budget_companies": budget_companies,
         "stretch_companies": stretch_companies,
     }
-
-
-def recommend_suppliers(industry: str) -> list[dict]:
-    return [
-        {
-            "name": s["name"],
-            "category": s["category"],
-            "estimated_cost": s["estimated_cost"],
-            "website": s["url"],
-            "location": s["location"],
-        }
-        for s in CURATED_UAE_SUPPLIERS
-        if s["tier"] == "value"
-    ][:3]

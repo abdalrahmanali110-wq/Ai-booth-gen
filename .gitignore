@@ -1,6 +1,11 @@
 node_modules/
 venv/
 .env
+**/.env
 __pycache__/
+*.py[cod]
 dist/
 build/
+backend/generated_pdfs/
+frontend/dist/
+.vscode/

@@ -388,9 +388,6 @@ def generate_consultation_report(
         "stretch_companies": stretch_companies,
         "cost_saving_tips": cost_saving_tips,
         "location": requirements.get("location") or "Dubai",
-        # Legacy keys for older UI paths
-        "premium_companies": stretch_companies,
-        "value_companies": web_companies,
     }
     report["markdown"] = _format_markdown(report)
     return report

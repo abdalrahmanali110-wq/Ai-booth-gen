@@ -44,8 +44,8 @@ export default function ConsultationReport({ report }) {
   if (!report) return null;
 
   const analysis = report.budget_analysis;
-  const webCompanies = report.web_companies || report.value_companies || [];
-  const stretchCompanies = report.stretch_companies || report.premium_companies || [];
+  const webCompanies = report.web_companies || [];
+  const stretchCompanies = report.stretch_companies || [];
 
   return (
     <div className="consultation-report">

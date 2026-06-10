@@ -284,10 +284,8 @@ export default function Chat() {
         {
           id: `assistant-gen-${Date.now()}`,
           role: "assistant",
-          message: (
-            "Your booth concept has been regenerated. "
-            "See the updated analysis below for UAE cost estimates and contractors."
-          ),
+          message:
+            "Your booth concept has been regenerated. See the updated analysis below for UAE cost estimates and contractors.",
         },
       ]);
     } catch (err) {

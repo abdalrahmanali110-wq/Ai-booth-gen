@@ -90,21 +90,6 @@
   animation-delay: 0.36s;
 }
 
-/* ── Scroll reveal (via Intersection Observer) ── */
-
-.reveal-on-scroll {
-  opacity: 0;
-  transform: translateY(14px);
-  transition:
-    opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.reveal-on-scroll.is-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 /* ── Details panel content ── */
 
 .details-panel.open .details-panel-header {
