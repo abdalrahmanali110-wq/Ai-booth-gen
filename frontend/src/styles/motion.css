@@ -1,0 +1,176 @@
+/* ── Keyframes ── */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+@keyframes soft-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(196, 168, 130, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px 0 rgba(196, 168, 130, 0.12);
+  }
+}
+
+/* ── Message entrance ── */
+
+.message {
+  animation: fade-up 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.message.assistant {
+  animation-duration: 0.42s;
+}
+
+/* ── Welcome screen stagger ── */
+
+.welcome-screen .welcome-icon {
+  animation: scale-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.welcome-screen h2 {
+  animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+}
+
+.welcome-screen > p {
+  animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.14s both;
+}
+
+.welcome-suggestions .suggestion-chip {
+  animation: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.welcome-suggestions .suggestion-chip:nth-child(1) {
+  animation-delay: 0.2s;
+}
+
+.welcome-suggestions .suggestion-chip:nth-child(2) {
+  animation-delay: 0.28s;
+}
+
+.welcome-suggestions .suggestion-chip:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+/* ── Scroll reveal (via Intersection Observer) ── */
+
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-on-scroll.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Details panel content ── */
+
+.details-panel.open .details-panel-header {
+  animation: fade-in 0.3s ease both;
+}
+
+.details-panel.open .details-row {
+  animation: fade-up 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.details-panel.open .details-row:nth-child(1) { animation-delay: 0.04s; }
+.details-panel.open .details-row:nth-child(2) { animation-delay: 0.08s; }
+.details-panel.open .details-row:nth-child(3) { animation-delay: 0.12s; }
+.details-panel.open .details-row:nth-child(4) { animation-delay: 0.16s; }
+.details-panel.open .details-row:nth-child(5) { animation-delay: 0.2s; }
+.details-panel.open .details-row:nth-child(6) { animation-delay: 0.24s; }
+.details-panel.open .details-row:nth-child(7) { animation-delay: 0.28s; }
+
+.details-panel.open .details-image,
+.details-panel.open .details-consultation,
+.details-panel.open .details-panel-footer,
+.details-panel.open .details-empty {
+  animation: fade-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+
+/* ── Image card ── */
+
+.inline-image-card {
+  animation: scale-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.inline-image-card img {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.inline-image-card:hover img {
+  transform: scale(1.015);
+}
+
+/* ── Interactive press feedback ── */
+
+.pressable {
+  transition:
+    transform 0.15s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
+}
+
+.pressable:hover {
+  transform: translateY(-1px);
+}
+
+.pressable:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* ── Focus rings ── */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible) {
+  outline: none;
+}
