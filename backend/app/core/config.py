@@ -48,3 +48,6 @@ DEFAULT_USER_ID = os.getenv(
     "DEFAULT_USER_ID",
     "032f3894-2957-428b-8342-cfff63c9da47",
 )
+
+_site = os.getenv("SITE_URL") or os.getenv("VERCEL_URL") or "http://localhost:5173"
+SITE_URL = _site if _site.startswith("http") else f"https://{_site}"

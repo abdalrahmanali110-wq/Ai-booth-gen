@@ -3,7 +3,7 @@ import re
 
 import httpx
 
-from app.core.config import GEMMA_MODEL, OPENROUTER_API_KEY
+from app.core.config import GEMMA_MODEL, OPENROUTER_API_KEY, SITE_URL
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -39,7 +39,7 @@ def _openrouter_headers() -> dict:
     return {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "http://localhost:5173",
+        "HTTP-Referer": SITE_URL,
         "X-Title": "AI Booth Generator",
     }
 

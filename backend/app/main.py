@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import SITE_URL
 from app.api.chat import router as chat_router
 
 app = FastAPI(
@@ -10,7 +11,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
+    allow_origin_regex=(
+        r"https://([a-z0-9-]+\.)*vercel\.app"
+        r"|http://(localhost|127\.0\.0\.1):\d+"
+    ),
+    allow_origins=[SITE_URL] if SITE_URL else [],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
