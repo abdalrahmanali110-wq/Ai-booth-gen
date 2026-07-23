@@ -11,6 +11,7 @@
     }
   },
   "rewrites": [
+    { "source": "/design/:path*", "destination": "/api/index.py" },
     { "source": "/chat/sessions", "destination": "/api/index.py" },
     { "source": "/chat/message", "destination": "/api/index.py" },
     { "source": "/chat/session/:path*", "destination": "/api/index.py" },

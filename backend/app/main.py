@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import SITE_URL
 from app.api.chat import router as chat_router
+from app.api.questionnaire import router as questionnaire_router
 
 app = FastAPI(
     title="AI Booth Generator API",
@@ -25,6 +26,12 @@ app.include_router(
     chat_router,
     prefix="/chat",
     tags=["Chat"],
+)
+
+app.include_router(
+    questionnaire_router,
+    prefix="/design",
+    tags=["Design Questionnaire"],
 )
 
 
