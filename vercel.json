@@ -11,7 +11,10 @@
     }
   },
   "rewrites": [
-    { "source": "/design/:path*", "destination": "/api/index.py" },
+    { "source": "/design/questions", "destination": "/api/index.py" },
+    { "source": "/design/sessions", "destination": "/api/index.py" },
+    { "source": "/design/session", "destination": "/api/index.py" },
+    { "source": "/design/session/:path*", "destination": "/api/index.py" },
     { "source": "/chat/sessions", "destination": "/api/index.py" },
     { "source": "/chat/message", "destination": "/api/index.py" },
     { "source": "/chat/session/:path*", "destination": "/api/index.py" },
