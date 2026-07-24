@@ -118,14 +118,25 @@ export default function Design() {
               phone: session.contact.phone || "",
             });
             setLeadSaved(true);
+          } else {
+            setLeadSaved(false);
           }
+
+          // Existing session URL should never bounce back to the landing CTA.
           if (session.image_url) {
             setStep(STEPS.RESULT);
-          } else if (Object.keys(session.answers || {}).length) {
-            setStep(STEPS.QUESTIONS);
           } else {
-            setStep(STEPS.LANDING);
+            setQuestionIndex(0);
+            setStep(STEPS.QUESTIONS);
           }
+        } else {
+          setSessionId(null);
+          setAnswers({});
+          setImageUrl(null);
+          setRegenCount(0);
+          setLeadSaved(false);
+          setQuestionIndex(0);
+          setStep(STEPS.LANDING);
         }
       } catch (err) {
         if (!cancelled) {
@@ -228,10 +239,12 @@ export default function Design() {
     setError("");
     setLoading(true);
     try {
-      await ensureSession();
+      // Move to questions immediately so the CTA never feels like a no-op.
       setQuestionIndex(0);
       setStep(STEPS.QUESTIONS);
+      await ensureSession();
     } catch (err) {
+      setStep(STEPS.LANDING);
       setError(
         err.response?.data?.detail ||
           "Failed to start. Run migration 007_booth_designs.sql in Supabase."
