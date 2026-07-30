@@ -261,6 +261,7 @@ def _looks_like_event(text: str) -> bool:
 
 def _apply_starter_prompt_hints(text: str, updated: dict) -> dict:
     """Pull obvious facts from chatbox starter prompts."""
+    lower = text.lower()
     if not updated.get("booth_size"):
         size = _parse_booth_size(text)
         if size:
@@ -269,6 +270,8 @@ def _apply_starter_prompt_hints(text: str, updated: dict) -> dict:
         industry = _parse_industry(text)
         if industry:
             updated["industry"] = industry
+        elif re.search(r"\bmotor\b|\bcar brand\b|\bautomotive\b", lower):
+            updated["industry"] = "Automotive"
     if not updated.get("open_sides"):
         sides = _parse_open_sides(text)
         if sides:
@@ -375,7 +378,9 @@ def contextual_extract_from_turn(
         pass
     else:
         # Don't overwrite brand/event from full starter sentences if already inferred.
-        if field == "brand_name" and re.search(r"^design a\b", lower):
+        if field == "brand_name" and re.search(
+            r"^(design|make|create|build)\b", lower
+        ):
             pass
         else:
             updated[field] = text

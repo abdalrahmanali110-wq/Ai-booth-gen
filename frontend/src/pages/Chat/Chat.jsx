@@ -32,6 +32,7 @@ import {
   setStoredAuth,
 } from "../../services/storage";
 import AuthModal from "../../components/AuthModal";
+import { getQuickReplies } from "../../utils/intake";
 import { useTheme } from "../../hooks/useTheme";
 
 const DEFAULT_TITLE = "New Booth Consultation";
@@ -70,7 +71,12 @@ export default function Chat() {
   const [regenerateError, setRegenerateError] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(() => !isMobileViewport());
   const [isMobile, setIsMobile] = useState(isMobileViewport);
-  const [quota, setQuota] = useState({ used: 0, remaining: 3, max: 3 });
+  const [quota, setQuota] = useState({
+    used: 0,
+    remaining: 999,
+    max: 999,
+    unlimited: true,
+  });
   const [authUser, setAuthUser] = useState(() => getStoredAuth());
   const [authOpen, setAuthOpen] = useState(false);
   const [converting3d, setConverting3d] = useState(false);
@@ -471,10 +477,10 @@ export default function Chat() {
     };
   }, [routeSessionId, sessionId, runConvertTo3D]);
 
-  const handleSend = useCallback(
-    async (event) => {
-      event.preventDefault();
-      if (!input.trim() || loading) return;
+  const submitMessage = useCallback(
+    async (rawText) => {
+      const userText = (rawText || "").trim();
+      if (!userText || loading) return;
 
       let activeId = sessionId;
 
@@ -492,7 +498,6 @@ export default function Chat() {
         }
       }
 
-      const userText = input.trim();
       setInput("");
       setError("");
       shouldScrollRef.current = true;
@@ -552,7 +557,22 @@ export default function Chat() {
         setLoading(false);
       }
     },
-    [input, loading, sessionId, navigate, closeSidebar]
+    [loading, sessionId, navigate, closeSidebar]
+  );
+
+  const handleSend = useCallback(
+    async (event) => {
+      event.preventDefault();
+      await submitMessage(input);
+    },
+    [input, submitMessage]
+  );
+
+  const handleQuickReply = useCallback(
+    (label) => {
+      submitMessage(label);
+    },
+    [submitMessage]
   );
 
   const handleKeyDown = useCallback(
@@ -577,6 +597,11 @@ export default function Chat() {
     authUser?.name?.split?.(" ")?.[0] ||
     authUser?.email?.split?.("@")?.[0] ||
     null;
+  const quickReplies = useMemo(
+    () => (showWelcome ? [] : getQuickReplies(requirements)),
+    [showWelcome, requirements]
+  );
+  const quotaUnlimited = Boolean(quota?.unlimited) || quota?.max >= 999;
 
   return (
     <div
@@ -619,8 +644,12 @@ export default function Chat() {
             <h1>{activeSession?.title || "Booth studio"}</h1>
             <p>
               {firstName
-                ? `Hi ${firstName} · ${quota.remaining} of ${quota.max} free generations left`
-                : `${quota.remaining} of ${quota.max} free generations remaining`}
+                ? quotaUnlimited
+                  ? `Hi ${firstName} · testing mode (unlimited images)`
+                  : `Hi ${firstName} · ${quota.remaining} of ${quota.max} free generations left`
+                : quotaUnlimited
+                  ? "Testing mode · unlimited image generations"
+                  : `${quota.remaining} of ${quota.max} free generations remaining`}
             </p>
           </div>
 
@@ -730,6 +759,21 @@ export default function Chat() {
             )}
 
             <footer className="chat-composer">
+              {quickReplies.length > 0 && (
+                <div className="quick-replies" aria-label="Suggested answers">
+                  {quickReplies.map((item) => (
+                    <button
+                      key={`${item.field}-${item.label}`}
+                      type="button"
+                      className="quick-reply-chip pressable"
+                      disabled={loading}
+                      onClick={() => handleQuickReply(item.label)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <form className="composer-form" onSubmit={handleSend}>
                 <div className="composer-box">
                   <textarea
@@ -774,7 +818,7 @@ export default function Chat() {
             loading={loading}
             regenerating={regenerating}
             converting3d={converting3d}
-            quota={quota}
+            quotaUnlimited={quotaUnlimited}
             authUser={authUser}
             onSignIn={handleSignIn}
             onSignOut={handleSignOut}

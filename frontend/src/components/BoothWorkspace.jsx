@@ -1,4 +1,6 @@
 import ModelViewer from "./ModelViewer";
+import ProjectBrief from "./ProjectBrief";
+import { isBriefReady } from "../utils/intake";
 
 const BUILD_STEPS = [
   { key: "brand_name", label: "Brand", hint: "Brand name" },
@@ -29,7 +31,7 @@ export default function BoothWorkspace({
   loading,
   regenerating,
   converting3d,
-  quota,
+  quotaUnlimited,
   authUser,
   onSignIn,
   onSignOut,
@@ -48,6 +50,7 @@ export default function BoothWorkspace({
       : loading
         ? "Updating your brief..."
         : "";
+  const briefReady = isBriefReady(requirements) || Boolean(imageUrl);
 
   const greetingName =
     authUser?.name?.split?.(" ")?.[0] ||
@@ -93,9 +96,7 @@ export default function BoothWorkspace({
       <div className="workspace-progress-block">
         <div className="workspace-progress-meta">
           <span>{progress}% brief complete</span>
-          <span>
-            {quota?.remaining ?? 0} of {quota?.max ?? 3} free images left
-          </span>
+          <span>{quotaUnlimited ? "Testing mode · unlimited images" : "Free images available"}</span>
         </div>
         <div
           className="workspace-progress-track"
@@ -144,20 +145,24 @@ export default function BoothWorkspace({
         )}
       </div>
 
-      <ul className="workspace-steps">
-        {BUILD_STEPS.map((step) => {
-          const value = formatStepValue(step.key, requirements[step.key]);
-          return (
-            <li key={step.key} className={value ? "done" : ""}>
-              <span className="step-dot" aria-hidden="true" />
-              <div>
-                <strong>{step.label}</strong>
-                <p>{value || step.hint}</p>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      {briefReady ? (
+        <ProjectBrief requirements={requirements} />
+      ) : (
+        <ul className="workspace-steps">
+          {BUILD_STEPS.map((step) => {
+            const value = formatStepValue(step.key, requirements[step.key]);
+            return (
+              <li key={step.key} className={value ? "done" : ""}>
+                <span className="step-dot" aria-hidden="true" />
+                <div>
+                  <strong>{step.label}</strong>
+                  <p>{value || step.hint}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       <div className="workspace-actions">
         {imageUrl && (
@@ -165,7 +170,7 @@ export default function BoothWorkspace({
             type="button"
             className="workspace-secondary-btn pressable"
             onClick={onRegenerate}
-            disabled={regenerating || (quota && quota.remaining <= 0)}
+            disabled={regenerating}
           >
             {regenerating ? "Regenerating..." : "Regenerate image"}
           </button>
@@ -185,12 +190,6 @@ export default function BoothWorkspace({
                 : authUser?.auth_user_id
                   ? "Generate 3D model"
                   : "Sign in to generate 3D"}
-          </button>
-        )}
-
-        {!authUser?.auth_user_id && (quota?.remaining ?? 1) <= 0 && (
-          <button type="button" className="workspace-primary-btn pressable" onClick={onSignIn}>
-            Sign in to continue
           </button>
         )}
       </div>

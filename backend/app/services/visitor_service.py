@@ -53,20 +53,24 @@ def count_image_attempts(visitor_id: str | None = None, user_id: str | None = No
     return len(response.data or [])
 
 
-def get_quota(visitor_id: str | None = None, user_id: str | None = None) -> dict[str, int]:
+def get_quota(visitor_id: str | None = None, user_id: str | None = None) -> dict[str, Any]:
     # Authenticated users keep the same free cap for MVP unless claimed differently.
     used = count_image_attempts(visitor_id=visitor_id, user_id=user_id)
     max_attempts = ANON_MAX_IMAGE_GENERATIONS
-    remaining = max(0, max_attempts - used)
+    unlimited = max_attempts <= 0
+    remaining = 999 if unlimited else max(0, max_attempts - used)
     return {
         "used": used,
         "remaining": remaining,
-        "max": max_attempts,
+        "max": 999 if unlimited else max_attempts,
+        "unlimited": unlimited,
     }
 
 
-def assert_can_generate(visitor_id: str | None = None, user_id: str | None = None) -> dict[str, int]:
+def assert_can_generate(visitor_id: str | None = None, user_id: str | None = None) -> dict[str, Any]:
     quota = get_quota(visitor_id=visitor_id, user_id=user_id)
+    if quota.get("unlimited"):
+        return quota
     if quota["remaining"] <= 0:
         raise PermissionError(
             f"Free generation limit reached ({quota['max']} images). "
