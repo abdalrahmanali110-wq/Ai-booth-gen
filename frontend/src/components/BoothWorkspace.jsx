@@ -1,12 +1,15 @@
 import ModelViewer from "./ModelViewer";
 
 const BUILD_STEPS = [
-  { key: "event_name", label: "Event", hint: "Waiting for event name" },
+  { key: "brand_name", label: "Brand", hint: "Brand name" },
   { key: "industry", label: "Industry", hint: "Industry not set yet" },
+  { key: "event_name", label: "Event", hint: "Event name" },
+  { key: "location", label: "Location", hint: "City or venue" },
   { key: "booth_size", label: "Size", hint: "Booth footprint" },
-  { key: "budget", label: "Budget", hint: "Budget target" },
-  { key: "theme", label: "Style", hint: "Look & feel" },
-  { key: "location", label: "Location", hint: "Venue city" },
+  { key: "open_sides", label: "Open sides", hint: "1 / 2 / 3 / all" },
+  { key: "theme", label: "Direction", hint: "Design feel" },
+  { key: "brand_colors", label: "Colors", hint: "Brand colors" },
+  { key: "budget", label: "Budget", hint: "Budget in AED" },
 ];
 
 function formatStepValue(key, value) {

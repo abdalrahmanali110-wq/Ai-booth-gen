@@ -678,9 +678,13 @@ export default function Chat() {
                     </p>
                     <div className="welcome-suggestions">
                       {[
-                        "I need a booth for Arab Health",
-                        "6x6 booth for a book expo in Sharjah",
-                        "Modern tech booth, budget 50,000 AED",
+                        "Design a 6x6 fashion booth",
+                        "Design a corner booth for a tech brand",
+                        "Design a big open booth with two floors",
+                        "Design a booth for a car brand",
+                        "Design a small booth for a food stand",
+                        "Design a fancy jewelry booth",
+                        "Design a booth for a government brand",
                       ].map((suggestion) => (
                         <button
                           key={suggestion}

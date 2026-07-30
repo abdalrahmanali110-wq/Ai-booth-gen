@@ -20,29 +20,39 @@ from app.services.image_service import generate_booth_image
 from app.services.budget_service import calculate_budget
 
 REQUIRED_FIELDS = [
+    "brand_name",
     "industry",
     "event_name",
-    "booth_size",
-    "budget",
-    "theme",
     "location",
+    "booth_size",
+    "open_sides",
+    "theme",
+    "brand_colors",
+    "special_requirements",
+    "budget",
 ]
 
 AUTO_TITLE_PLACEHOLDERS = {
     "",
     DEFAULT_SESSION_TITLE,
     "Booth consultation",
+    "Booth studio",
 }
 
 
 def empty_requirements() -> dict[str, Any]:
     return {
+        "brand_name": None,
         "industry": None,
         "event_name": None,
         "booth_size": None,
         "budget": None,
         "theme": None,
         "location": None,
+        "open_sides": None,
+        "brand_colors": None,
+        "slogan": None,
+        "event_date": None,
         "special_requirements": None,
     }
 
@@ -60,18 +70,21 @@ def get_requirements(session_id: str) -> dict[str, Any]:
 
     row = response.data[0]
     special = row.get("special_requirements")
-    if special == [] and not any(
-        row.get(field) for field in REQUIRED_FIELDS
-    ):
+    if special == [] and not any(row.get(field) for field in REQUIRED_FIELDS if field != "special_requirements"):
         special = None
 
     return {
+        "brand_name": row.get("brand_name"),
         "industry": row.get("industry"),
         "event_name": row.get("event_name"),
         "booth_size": row.get("booth_size"),
         "budget": row.get("budget"),
         "theme": row.get("theme"),
         "location": row.get("location"),
+        "open_sides": row.get("open_sides"),
+        "brand_colors": row.get("brand_colors"),
+        "slogan": row.get("slogan"),
+        "event_date": row.get("event_date"),
         "special_requirements": special,
     }
 
@@ -91,6 +104,11 @@ def _requirements_payload(
         "theme": requirements.get("theme"),
         "location": requirements.get("location"),
         "special_requirements": requirements.get("special_requirements"),
+        "brand_name": requirements.get("brand_name"),
+        "open_sides": requirements.get("open_sides"),
+        "brand_colors": requirements.get("brand_colors"),
+        "slogan": requirements.get("slogan"),
+        "event_date": requirements.get("event_date"),
     }
 
     if include_optional and requirements.get("booth_request_id"):
@@ -146,75 +164,144 @@ def save_requirements(session_id: str, requirements: dict[str, Any]) -> None:
         else:
             supabase.table("booth_requirements").insert(payload).execute()
     except Exception:
-        payload = _requirements_payload(
-            session_id,
-            requirements,
-            include_optional=False,
-        )
+        # Fallback if migration 009 columns are not applied yet
+        legacy = {
+            "session_id": session_id,
+            "industry": requirements.get("industry"),
+            "event_name": requirements.get("event_name"),
+            "booth_size": requirements.get("booth_size"),
+            "budget": requirements.get("budget"),
+            "theme": requirements.get("theme"),
+            "location": requirements.get("location"),
+            "special_requirements": requirements.get("special_requirements"),
+        }
+        extras = []
+        for key, label in (
+            ("brand_name", "Brand"),
+            ("open_sides", "Open sides"),
+            ("brand_colors", "Colors"),
+            ("slogan", "Slogan"),
+            ("event_date", "Event date"),
+        ):
+            value = requirements.get(key)
+            if value:
+                extras.append(f"{label}: {value}")
+        if extras:
+            features = legacy.get("special_requirements") or []
+            if not isinstance(features, list):
+                features = [str(features)]
+            legacy["special_requirements"] = extras + list(features)
+
         if existing.data:
-            supabase.table("booth_requirements").update(payload).eq(
+            supabase.table("booth_requirements").update(legacy).eq(
                 "session_id", session_id
             ).execute()
         else:
-            supabase.table("booth_requirements").insert(payload).execute()
+            supabase.table("booth_requirements").insert(legacy).execute()
 
 
 def get_next_question(requirements: dict[str, Any]) -> str | None:
+    if not requirements.get("brand_name"):
+        return "What's your brand name?"
+
     if not requirements.get("industry"):
-        return "What industry are you in?"
+        return (
+            "What industry are you in? "
+            "Fashion / Tech / Automotive / Food & Beverage / Jewelry / "
+            "Government / Finance / Other"
+        )
+
+    if requirements.get("slogan") is None:
+        return "What's your slogan or tagline? (optional — say skip if none)"
 
     if not requirements.get("event_name"):
-        return "What event or exhibition will you attend?"
-
-    if not requirements.get("booth_size"):
-        return "What booth size do you need? (e.g. 3x3, 6x6, 12x12)"
-
-    if not requirements.get("budget"):
-        return "What is your budget in AED?"
-
-    if not requirements.get("theme"):
-        return "What theme or style do you prefer for your booth?"
+        return "What's the event name?"
 
     if not requirements.get("location"):
-        return "In which city will the event take place?"
+        return "Where is the event located? (city or venue)"
+
+    if requirements.get("event_date") is None:
+        return "What's the event date? (optional — say skip if you don't know yet)"
+
+    if not requirements.get("booth_size"):
+        return (
+            "What booth size do you need? "
+            "3x3 / 4x4 / 6x6 / 9x9 / Custom (enter dimensions)"
+        )
+
+    if not requirements.get("open_sides"):
+        return (
+            "How many open sides? "
+            "1 side / 2 sides (corner) / 3 sides / All sides (open on every side)"
+        )
+
+    if not requirements.get("theme"):
+        return (
+            "What direction do you want the design to feel? "
+            "Premium & Luxury / Modern & Tech / Minimal & Clean / "
+            "Bold & Playful / Traditional & Elegant"
+        )
+
+    if not requirements.get("brand_colors"):
+        return "What are your brand colors?"
 
     if requirements.get("special_requirements") is None:
-        return "Any special requirements for your booth? (or say none)"
+        return (
+            "What do you want inside your booth? You can pick several: "
+            "Counter / Reception desk / Meeting room / Storage room / "
+            "LED screens / Hanging sign / Seating area / Product shelves "
+            "(or say none)"
+        )
+
+    if not requirements.get("budget"):
+        return (
+            "What's your budget range in AED? "
+            "Under 40,000 / 40,000–90,000 / 90,000–180,000 / 180,000+"
+        )
 
     return None
 
 
 def is_complete(requirements: dict[str, Any]) -> bool:
     for field in REQUIRED_FIELDS:
+        if field == "special_requirements":
+            if requirements.get("special_requirements") is None:
+                return False
+            continue
         if not requirements.get(field):
             return False
     return get_next_question(requirements) is None
 
 
 def get_missing_fields(requirements: dict[str, Any]) -> list[str]:
-    missing = [
-        field
-        for field in REQUIRED_FIELDS
-        if not requirements.get(field)
-    ]
-    if requirements.get("special_requirements") is None:
-        missing.append("special_requirements")
+    missing = []
+    for field in REQUIRED_FIELDS:
+        if field == "special_requirements":
+            if requirements.get("special_requirements") is None:
+                missing.append(field)
+        elif not requirements.get(field):
+            missing.append(field)
     return missing
 
 
 def build_booth_prompt(requirements: dict[str, Any]) -> str:
     special = requirements.get("special_requirements") or []
     if isinstance(special, list):
-        special = ", ".join(special)
+        special = ", ".join(str(item) for item in special)
+    brand = requirements.get("brand_name") or "the brand"
+    colors = requirements.get("brand_colors") or "brand colors"
+    open_sides = requirements.get("open_sides") or "standard sides"
+    slogan = requirements.get("slogan") or ""
+    slogan_bit = f' slogan "{slogan}",' if slogan and slogan.lower() != "skip" else ""
     return (
-        f"Luxury {requirements['industry']} exhibition booth at "
+        f"Luxury {requirements['industry']} exhibition booth for {brand} at "
         f"{requirements['event_name']} in {requirements['location']}, "
-        f"{requirements['theme']} design, booth size {requirements['booth_size']}, "
-        f"budget tier {requirements['budget']} AED, "
-        f"features: {special}, "
-        f"professional trade show stand, LED walls, branding panels, "
-        f"reception counter, meeting lounge, product displays, "
-        f"photorealistic architectural visualization, ultra realistic, 8k"
+        f"{requirements['theme']} design direction,{slogan_bit} "
+        f"brand colors {colors}, booth size {requirements['booth_size']}, "
+        f"open sides: {open_sides}, budget tier {requirements['budget']} AED, "
+        f"interior features: {special or 'reception and display'}, "
+        f"professional trade show stand, photorealistic architectural "
+        f"visualization, ultra realistic, 8k"
     )
 
 

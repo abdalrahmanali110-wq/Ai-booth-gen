@@ -24,9 +24,9 @@ router = APIRouter()
 
 
 WELCOME_MESSAGE = (
-    "Hello! I am your AI Exhibition Consultant. "
-    "Tell me about your booth — for example: "
-    "\"I need a booth for Arab Health.\""
+    "Hello! I am your AI Booth Designer. "
+    "Pick a starter idea below or tell me what you want — "
+    "for example: \"Design a 6x6 fashion booth\"."
 )
 
 

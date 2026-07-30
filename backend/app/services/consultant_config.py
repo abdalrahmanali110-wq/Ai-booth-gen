@@ -20,10 +20,20 @@ def build_consultant_system_prompt() -> str:
         "through natural conversation and help the user refine their concept."
     )
 
+    starters = config.get("starter_prompts") or []
+    question_order = config.get("question_order") or []
     required = config.get("required_fields") or {}
     conditional = config.get("conditional_fields") or {}
     gate = config.get("generation_gate") or {}
     hard = config.get("hard_constraints") or []
+
+    starter_lines = "\n".join(f'- "{item}"' for item in starters)
+    question_lines = []
+    for item in question_order:
+        if not isinstance(item, dict):
+            continue
+        optional = " (optional)" if item.get("optional") else ""
+        question_lines.append(f"- {item.get('field')}: {item.get('ask')}{optional}")
 
     required_lines = []
     for key, meta in required.items():
@@ -41,11 +51,14 @@ def build_consultant_system_prompt() -> str:
     parts = [
         base,
         "",
-        "REQUIRED FIELDS TO COLLECT:",
-        "\n".join(required_lines) or "- Collect booth size, venue, style, and features.",
+        "STARTER PROMPTS USERS MAY CLICK:",
+        starter_lines or "- Design a 6x6 fashion booth",
         "",
-        "CONDITIONAL FOLLOW-UPS:",
-        "\n".join(conditional_lines) or "- Ask follow-ups only when relevant.",
+        "ASK THESE QUESTIONS ONE BY ONE (skip if already answered from the starter):",
+        "\n".join(question_lines) or "\n".join(required_lines),
+        "",
+        "CONDITIONAL / OPTIONAL:",
+        "\n".join(conditional_lines) or "- Slogan, event date, and logo are optional.",
         "",
         "HARD CONSTRAINTS:",
         "\n".join(f"- {item}" for item in hard) or "- Do not invent venue rules.",
@@ -60,7 +73,8 @@ def build_consultant_system_prompt() -> str:
         "- When the brief is complete, show a short plain-language summary and ask the user to confirm with yes / looks good / proceed.",
         "- After confirmation language from the user, the backend will generate the image.",
         "- Speak in simple everyday language; explain technical terms briefly when used.",
-        "- Ask at most 1-2 questions per reply.",
+        "- Ask at most 1 question per reply unless merging event name + location.",
+        "- Budget answers should be treated in AED (Dirham).",
     ]
     return "\n".join(parts)
 

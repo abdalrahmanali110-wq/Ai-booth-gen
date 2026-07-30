@@ -1,13 +1,18 @@
 import ConsultationReport from "./ConsultationReport";
 
 const REQUIREMENT_LABELS = {
+  brand_name: "Brand",
   industry: "Industry",
+  slogan: "Slogan",
   event_name: "Event",
-  booth_size: "Booth size",
-  budget: "Budget (AED)",
-  theme: "Theme",
   location: "Location",
-  special_requirements: "Special requirements",
+  event_date: "Event date",
+  booth_size: "Booth size",
+  open_sides: "Open sides",
+  theme: "Design direction",
+  brand_colors: "Brand colors",
+  budget: "Budget (AED)",
+  special_requirements: "Inside the booth",
 };
 
 function formatValue(key, value) {

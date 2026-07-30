@@ -8,29 +8,67 @@ from app.core.config import GEMMA_MODEL, OPENROUTER_API_KEY, SITE_URL
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 REQUIREMENT_FIELDS = [
+    "brand_name",
     "industry",
     "event_name",
     "booth_size",
     "budget",
     "theme",
     "location",
+    "open_sides",
+    "brand_colors",
+    "slogan",
+    "event_date",
     "special_requirements",
 ]
+
+INDUSTRY_ALIASES = {
+    "fashion": "Fashion",
+    "tech": "Tech",
+    "technology": "Tech",
+    "automotive": "Automotive",
+    "car": "Automotive",
+    "cars": "Automotive",
+    "auto": "Automotive",
+    "food": "Food & Beverage",
+    "food stand": "Food & Beverage",
+    "food & beverage": "Food & Beverage",
+    "jewelry": "Jewelry",
+    "jewellery": "Jewelry",
+    "government": "Government",
+    "gov": "Government",
+    "finance": "Finance",
+}
+
+THEME_ALIASES = {
+    "premium": "Premium & Luxury",
+    "luxury": "Premium & Luxury",
+    "fancy": "Premium & Luxury",
+    "modern": "Modern & Tech",
+    "tech": "Modern & Tech",
+    "minimal": "Minimal & Clean",
+    "clean": "Minimal & Clean",
+    "bold": "Bold & Playful",
+    "playful": "Bold & Playful",
+    "traditional": "Traditional & Elegant",
+    "elegant": "Traditional & Elegant",
+}
 
 CHAT_SYSTEM_PROMPT = """You are an AI Exhibition Booth Consultant for a client-facing production app.
 
 Collect booth requirements through natural conversation, one question at a time.
 
-Fields to collect (any order):
-- industry, event_name, booth_size, budget (AED), theme, location, special_requirements
+Fields to collect:
+- brand_name, industry, slogan (optional), event_name, location, event_date (optional),
+  booth_size, open_sides, theme (design direction), brand_colors,
+  special_requirements (interior features), budget (AED)
 
 Rules:
 - Ask only ONE question per reply, for the next missing field shown in the context.
 - Accept information in any order.
 - Be professional, concise, and friendly.
 - You CANNOT generate images. Never say you are generating or creating images.
-- When all fields are collected, say:
-  "Great, I have everything I need. Starting booth generation now."
+- When all required fields are collected, summarize and ask for confirmation.
 - Do not invent requirements the user did not provide.
 """
 
@@ -66,7 +104,17 @@ def _parse_json_response(content: str) -> dict:
 
 
 def _parse_budget_amount(text: str) -> int | None:
-    normalized = text.lower().replace(",", "").strip()
+    normalized = text.lower().replace(",", "").replace("–", "-").strip()
+
+    if "under 40" in normalized or "under 40000" in normalized or "under $10" in normalized:
+        return 35000
+    if "180000+" in normalized or "180k+" in normalized or "$50k+" in normalized or "50k+" in normalized:
+        return 200000
+    if re.search(r"90\s*[,.]?\s*000\s*-\s*180|90k\s*-\s*180k|\$25k\s*-\s*\$50k|25k\s*-\s*50k", normalized):
+        return 140000
+    if re.search(r"40\s*[,.]?\s*000\s*-\s*90|40k\s*-\s*90k|\$10k\s*-\s*\$25k|10k\s*-\s*25k", normalized):
+        return 70000
+
     match = re.search(r"(\d+(?:\.\d+)?)\s*k\b", normalized)
     if match:
         return int(float(match.group(1)) * 1000)
@@ -83,7 +131,73 @@ def _parse_booth_size(text: str) -> str | None:
     match = re.search(r"(\d+)\s*[x×]\s*(\d+)", text, re.I)
     if match:
         return f"{match.group(1)}x{match.group(2)}"
+    if re.search(r"\bsmall booth\b", text, re.I):
+        return "3x3"
+    if re.search(r"\bbig open booth|two floors|2 floors\b", text, re.I):
+        return "9x9"
     return None
+
+
+def _parse_industry(text: str) -> str | None:
+    lower = text.lower()
+    for key, label in INDUSTRY_ALIASES.items():
+        if re.search(rf"\b{re.escape(key)}\b", lower):
+            return label
+    return None
+
+
+def _parse_theme(text: str) -> str | None:
+    lower = text.lower()
+    for key, label in THEME_ALIASES.items():
+        if key in lower:
+            return label
+    for option in (
+        "Premium & Luxury",
+        "Modern & Tech",
+        "Minimal & Clean",
+        "Bold & Playful",
+        "Traditional & Elegant",
+    ):
+        if option.lower() in lower:
+            return option
+    return None
+
+
+def _parse_open_sides(text: str) -> str | None:
+    lower = text.lower()
+    if "corner" in lower or "2 side" in lower or "two side" in lower:
+        return "2 sides (corner)"
+    if "all side" in lower or "island" in lower or "4 side" in lower or "every side" in lower:
+        return "All sides"
+    if "3 side" in lower or "three side" in lower:
+        return "3 sides"
+    if "1 side" in lower or "one side" in lower:
+        return "1 side"
+    match = re.search(r"\b([1-4])\b", lower)
+    if match and ("side" in lower or "open" in lower):
+        n = match.group(1)
+        return {
+            "1": "1 side",
+            "2": "2 sides (corner)",
+            "3": "3 sides",
+            "4": "All sides",
+        }[n]
+    return None
+
+
+def _is_skip(text: str) -> bool:
+    return text.strip().lower() in {
+        "skip",
+        "none",
+        "no",
+        "n/a",
+        "na",
+        "nothing",
+        "no slogan",
+        "no date",
+        "later",
+        "skip for now",
+    }
 
 
 def _last_assistant_message(messages: list[dict]) -> str:
@@ -109,16 +223,29 @@ def _sanitize_requirements(requirements: dict) -> dict:
 
 def _missing_fields(requirements: dict) -> list[str]:
     order = [
+        "brand_name",
         "industry",
+        "slogan",
         "event_name",
-        "booth_size",
-        "budget",
-        "theme",
         "location",
+        "event_date",
+        "booth_size",
+        "open_sides",
+        "theme",
+        "brand_colors",
+        "special_requirements",
+        "budget",
     ]
-    missing = [field for field in order if not requirements.get(field)]
-    if requirements.get("special_requirements") is None:
-        missing.append("special_requirements")
+    missing = []
+    for field in order:
+        if field in {"slogan", "event_date"}:
+            if requirements.get(field) is None:
+                missing.append(field)
+        elif field == "special_requirements":
+            if requirements.get(field) is None:
+                missing.append(field)
+        elif not requirements.get(field):
+            missing.append(field)
     return missing
 
 
@@ -132,6 +259,27 @@ def _looks_like_event(text: str) -> bool:
     )
 
 
+def _apply_starter_prompt_hints(text: str, updated: dict) -> dict:
+    """Pull obvious facts from chatbox starter prompts."""
+    if not updated.get("booth_size"):
+        size = _parse_booth_size(text)
+        if size:
+            updated["booth_size"] = size
+    if not updated.get("industry"):
+        industry = _parse_industry(text)
+        if industry:
+            updated["industry"] = industry
+    if not updated.get("open_sides"):
+        sides = _parse_open_sides(text)
+        if sides:
+            updated["open_sides"] = sides
+    if not updated.get("theme"):
+        theme = _parse_theme(text)
+        if theme:
+            updated["theme"] = theme
+    return updated
+
+
 def _infer_target_field(
     text: str,
     question: str,
@@ -143,47 +291,33 @@ def _infer_target_field(
         return "booth_size"
     if _parse_budget_amount(text) and "budget" in missing:
         return "budget"
+    if _parse_open_sides(text) and "open_sides" in missing:
+        return "open_sides"
+    if _parse_industry(text) and "industry" in missing:
+        return "industry"
+    if _parse_theme(text) and "theme" in missing:
+        return "theme"
     if _looks_like_event(text) and "event_name" in missing:
         return "event_name"
-    if "theme" in missing and re.search(
-        r"\b(cozy|modern|luxury|wooden|rustic|elegant|colorful|warm|minimalist|"
-        r"vintage|futuristic|classic|bright|dark)\b",
-        text,
-        re.I,
-    ):
-        return "theme"
-    if "theme" in missing and len(text.split()) >= 4:
-        return "theme"
-    if "special_requirements" in missing and "," in text:
-        return "special_requirements"
-    if (
-        "location" in missing
-        and len(text.split()) == 1
-        and re.fullmatch(r"[A-Za-z][A-Za-z\-]+", text)
-        and not _looks_like_event(text)
-        and not _parse_budget_amount(text)
-    ):
-        return "location"
 
     field_by_question = [
-        (r"industry|business|sector|field", "industry"),
-        (r"event|exhibition|expo|fair|conference", "event_name"),
+        (r"brand name", "brand_name"),
+        (r"industry", "industry"),
+        (r"slogan|tagline", "slogan"),
+        (r"event name", "event_name"),
+        (r"event date|date", "event_date"),
+        (r"located|location|city|venue", "location"),
         (r"booth size|what size|dimensions", "booth_size"),
-        (r"budget|aed|spend|price|cost", "budget"),
-        (r"theme|style|aesthetic|look and feel", "theme"),
-        (r"city|location|where.*event|take place", "location"),
-        (r"special|requirement|feature", "special_requirements"),
+        (r"open sides|how many open", "open_sides"),
+        (r"direction|design to feel|theme|style", "theme"),
+        (r"brand colors|colours|color", "brand_colors"),
+        (r"inside your booth|counter|reception|led|shelves", "special_requirements"),
+        (r"budget|aed|dirham", "budget"),
+        (r"logo", "logo"),
     ]
     for pattern, field in field_by_question:
         if re.search(pattern, q) and field in missing:
             return field
-    if (
-        "theme" in missing
-        and len(text.split()) >= 2
-        and not _parse_budget_amount(text)
-        and not _parse_booth_size(text)
-    ):
-        return "theme"
 
     return missing[0] if missing else None
 
@@ -199,6 +333,8 @@ def contextual_extract_from_turn(
     if not text:
         return updated
 
+    updated = _apply_starter_prompt_hints(text, updated)
+
     question = _last_assistant_message(messages)
     missing = _missing_fields(updated)
     lower = text.lower()
@@ -211,21 +347,38 @@ def contextual_extract_from_turn(
         size = _parse_booth_size(text)
         if size:
             updated["booth_size"] = size
+        elif "booth_size" in missing and not re.search(r"design a ", lower):
+            updated["booth_size"] = text
     elif field == "budget":
         amount = _parse_budget_amount(text)
         if amount:
             updated["budget"] = amount
+    elif field == "industry":
+        updated["industry"] = _parse_industry(text) or text
+    elif field == "theme":
+        updated["theme"] = _parse_theme(text) or text
+    elif field == "open_sides":
+        updated["open_sides"] = _parse_open_sides(text) or text
+    elif field in {"slogan", "event_date"}:
+        updated[field] = "skip" if _is_skip(text) else text
     elif field == "special_requirements":
-        if lower in {"none", "no", "n/a", "nothing", "skip"}:
+        if _is_skip(text) or lower in {"none", "no", "nothing"}:
             updated["special_requirements"] = []
         else:
             updated["special_requirements"] = [
                 part.strip()
-                for part in re.split(r"[,;]", text)
+                for part in re.split(r"[,;/]", text)
                 if part.strip()
             ]
+    elif field == "logo":
+        # Optional — ignore for requirements completeness
+        pass
     else:
-        updated[field] = text
+        # Don't overwrite brand/event from full starter sentences if already inferred.
+        if field == "brand_name" and re.search(r"^design a\b", lower):
+            pass
+        else:
+            updated[field] = text
 
     return _sanitize_requirements(updated)
 
