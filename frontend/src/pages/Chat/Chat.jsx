@@ -9,6 +9,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import SessionSidebar from "../../components/SessionSidebar";
 import RequirementsPanel from "../../components/RequirementsPanel";
 import MessageList from "../../components/MessageList";
+import BoothWorkspace from "../../components/BoothWorkspace";
 import {
   createSession,
   deleteSession,
@@ -24,6 +25,7 @@ import { createModel3D, getModel3DJob } from "../../services/model3dService";
 import { completeOAuth } from "../../services/authService";
 import { getSupabaseClient } from "../../services/supabaseClient";
 import {
+  clearStoredAuth,
   consumePendingConvert,
   getPendingAuthSession,
   getStoredAuth,
@@ -73,6 +75,7 @@ export default function Chat() {
   const [authOpen, setAuthOpen] = useState(false);
   const [converting3d, setConverting3d] = useState(false);
   const [modelJob, setModelJob] = useState(null);
+  const [authIntent, setAuthIntent] = useState("signin");
 
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
@@ -373,11 +376,28 @@ export default function Chat() {
   const handleConvertTo3D = useCallback(() => {
     const auth = authUser || getStoredAuth();
     if (!auth?.auth_user_id) {
+      setAuthIntent("convert");
       setAuthOpen(true);
       return;
     }
     runConvertTo3D(auth);
   }, [authUser, runConvertTo3D]);
+
+  const handleSignIn = useCallback(() => {
+    setAuthIntent("signin");
+    setAuthOpen(true);
+  }, []);
+
+  const handleSignOut = useCallback(async () => {
+    clearStoredAuth();
+    setAuthUser(null);
+    try {
+      const supabase = await getSupabaseClient();
+      await supabase.auth.signOut();
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // Complete Google OAuth after redirect back from Google / Supabase.
   useEffect(() => {
@@ -553,11 +573,14 @@ export default function Chat() {
   const showWelcome = !sessionLoading && messages.length === 0 && !loading;
   const generationImageUrl =
     generationResult?.generated_image?.image_url || null;
-  const consultationReport = generationResult?.consultation_report || null;
+  const firstName =
+    authUser?.name?.split?.(" ")?.[0] ||
+    authUser?.email?.split?.("@")?.[0] ||
+    null;
 
   return (
     <div
-      className={`app-shell${sidebarOpen ? " sidebar-open" : ""}${
+      className={`app-shell studio-layout${sidebarOpen ? " sidebar-open" : ""}${
         detailsOpen ? " details-open" : ""
       }`}
     >
@@ -573,8 +596,8 @@ export default function Chat() {
         onDeleteSession={handleDeleteSession}
       />
 
-      <div className="chat-shell">
-        <header className="chat-topbar">
+      <div className="studio-main">
+        <header className="chat-topbar studio-topbar">
           <button
             type="button"
             className="icon-btn mobile-menu-btn"
@@ -593,123 +616,168 @@ export default function Chat() {
           </button>
 
           <div className="topbar-title">
-            <h1>{activeSession?.title || "Booth consultation"}</h1>
+            <h1>{activeSession?.title || "Booth studio"}</h1>
             <p>
-              {quota.remaining} of {quota.max} free generations remaining
+              {firstName
+                ? `Hi ${firstName} · ${quota.remaining} of ${quota.max} free generations left`
+                : `${quota.remaining} of ${quota.max} free generations remaining`}
             </p>
           </div>
 
-          <button
-            type="button"
-            className={`details-toggle pressable${detailsOpen ? " active" : ""}`}
-            onClick={toggleDetails}
-            aria-expanded={detailsOpen}
-          >
-            Details
-          </button>
-        </header>
-
-        <main className="chat-stage" ref={chatStageRef}>
-          <div className="chat-thread">
-            {sessionLoading && (
-              <div className="message assistant">
-                <div className="message-content">
-                  <p>Loading conversation...</p>
-                </div>
-              </div>
-            )}
-
-            {showWelcome && (
-              <div className="welcome-screen">
-                <div className="welcome-icon" aria-hidden="true" />
-                <h2>Design your exhibition booth</h2>
-                <p>
-                  Tell me about your event, booth size, budget, and style.
-                  I&apos;ll collect the details and generate a concept for you.
-                </p>
-                <div className="welcome-suggestions">
-                  {[
-                    "I need a booth for Arab Health",
-                    "6x6 booth for a book expo in Sharjah",
-                    "Modern tech booth, budget 50,000 AED",
-                  ].map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      className="suggestion-chip pressable"
-                      onClick={() => setInput(suggestion)}
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <MessageList
-              messages={messages}
-              loading={loading}
-              requirementsComplete={requirementsComplete}
-              generationImageUrl={generationImageUrl}
-              consultationReport={consultationReport}
-              bottomRef={bottomRef}
-              onConvertTo3D={generationImageUrl ? handleConvertTo3D : null}
-              converting3d={converting3d}
-              modelUrl={modelJob?.model_url || null}
-              modelStatus={modelJob?.status || null}
-            />
-          </div>
-        </main>
-
-        {error && (
-          <div className="chat-error-banner">
-            <p>{error}</p>
-            {requirementsComplete && sessionId && (
+          <div className="topbar-actions">
+            {authUser?.email ? (
               <button
                 type="button"
-                onClick={handleRegenerate}
-                disabled={regenerating}
+                className="topbar-auth-btn pressable"
+                onClick={handleSignOut}
               >
-                {regenerating ? "Generating..." : "Retry generation"}
+                Sign out
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="topbar-auth-btn primary pressable"
+                onClick={handleSignIn}
+              >
+                Sign in
               </button>
             )}
+            <button
+              type="button"
+              className={`details-toggle pressable${detailsOpen ? " active" : ""}`}
+              onClick={toggleDetails}
+              aria-expanded={detailsOpen}
+            >
+              Details
+            </button>
           </div>
-        )}
+        </header>
 
-        <footer className="chat-composer">
-          <form className="composer-form" onSubmit={handleSend}>
-            <div className="composer-box">
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Message Booth AI..."
-                disabled={loading}
-              />
-              <button
-                type="submit"
-                className="send-btn"
-                disabled={!input.trim() || loading}
-                aria-label="Send message"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M12 19V5M5 12l7-7 7 7"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+        <div className="studio-split">
+          <div className="chat-shell studio-chat">
+            <main className="chat-stage" ref={chatStageRef}>
+              <div className="chat-thread">
+                {sessionLoading && (
+                  <div className="message assistant">
+                    <div className="message-content">
+                      <p>Loading conversation...</p>
+                    </div>
+                  </div>
+                )}
+
+                {showWelcome && (
+                  <div className="welcome-screen compact">
+                    <h2>
+                      {firstName
+                        ? `${firstName}, design your exhibition booth`
+                        : "Design your exhibition booth"}
+                    </h2>
+                    <p>
+                      Tell me about your event — I&apos;ll collect the brief on the
+                      left while your booth takes shape on the right.
+                    </p>
+                    <div className="welcome-suggestions">
+                      {[
+                        "I need a booth for Arab Health",
+                        "6x6 booth for a book expo in Sharjah",
+                        "Modern tech booth, budget 50,000 AED",
+                      ].map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          className="suggestion-chip pressable"
+                          onClick={() => setInput(suggestion)}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <MessageList
+                  messages={messages}
+                  loading={loading}
+                  requirementsComplete={requirementsComplete}
+                  bottomRef={bottomRef}
+                />
+              </div>
+            </main>
+
+            {error && (
+              <div className="chat-error-banner">
+                <p>{error}</p>
+                {(String(error).toLowerCase().includes("limit") ||
+                  (quota.remaining <= 0 && !authUser)) && (
+                  <button type="button" onClick={handleSignIn}>
+                    Sign in with Google
+                  </button>
+                )}
+                {requirementsComplete && sessionId && quota.remaining > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleRegenerate}
+                    disabled={regenerating}
+                  >
+                    {regenerating ? "Generating..." : "Retry generation"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <footer className="chat-composer">
+              <form className="composer-form" onSubmit={handleSend}>
+                <div className="composer-box">
+                  <textarea
+                    ref={textareaRef}
+                    rows={1}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={
+                      firstName
+                        ? `Message your booth consultant, ${firstName}...`
+                        : "Message Booth AI..."
+                    }
+                    disabled={loading}
                   />
-                </svg>
-              </button>
-            </div>
-            <p className="composer-hint">
-              Booth AI can make mistakes. Verify important details before ordering.
-            </p>
-          </form>
-        </footer>
+                  <button
+                    type="submit"
+                    className="send-btn"
+                    disabled={!input.trim() || loading}
+                    aria-label="Send message"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M12 19V5M5 12l7-7 7 7"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </form>
+            </footer>
+          </div>
+
+          <BoothWorkspace
+            requirements={requirements}
+            imageUrl={generationImageUrl}
+            modelUrl={modelJob?.model_url || null}
+            modelStatus={modelJob?.status || null}
+            loading={loading}
+            regenerating={regenerating}
+            converting3d={converting3d}
+            quota={quota}
+            authUser={authUser}
+            onSignIn={handleSignIn}
+            onSignOut={handleSignOut}
+            onConvertTo3D={handleConvertTo3D}
+            onRegenerate={handleRegenerate}
+          />
+        </div>
       </div>
 
       {isMobile && sidebarOpen && (
@@ -738,6 +806,7 @@ export default function Chat() {
         open={authOpen}
         onClose={() => setAuthOpen(false)}
         sessionId={sessionId}
+        intent={authIntent}
       />
     </div>
   );

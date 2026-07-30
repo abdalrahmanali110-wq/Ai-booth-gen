@@ -70,7 +70,7 @@ def assert_can_generate(visitor_id: str | None = None, user_id: str | None = Non
     if quota["remaining"] <= 0:
         raise PermissionError(
             f"Free generation limit reached ({quota['max']} images). "
-            "Create an account to continue with 3D conversion and more options."
+            "Sign in with Google anytime to save your project and unlock 3D conversion."
         )
     return quota
 

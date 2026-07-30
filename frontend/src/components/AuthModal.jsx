@@ -2,18 +2,25 @@ import { useState } from "react";
 import { getSupabaseClient } from "../services/supabaseClient";
 import { setPendingAuthSession } from "../services/storage";
 
-export default function AuthModal({ open, onClose, sessionId }) {
+export default function AuthModal({
+  open,
+  onClose,
+  sessionId,
+  intent = "signin",
+}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   if (!open) return null;
+
+  const forConvert = intent === "convert";
 
   async function handleGoogleSignIn() {
     setLoading(true);
     setError("");
 
     try {
-      setPendingAuthSession(sessionId || null);
+      setPendingAuthSession(sessionId || null, { convert: forConvert });
       const supabase = await getSupabaseClient();
       const redirectTo = sessionId
         ? `${window.location.origin}/chat/${sessionId}`
@@ -33,7 +40,6 @@ export default function AuthModal({ open, onClose, sessionId }) {
       if (oauthError) {
         throw oauthError;
       }
-      // Browser navigates to Google; no further UI update needed.
     } catch (err) {
       setPendingAuthSession(null);
       setError(err.message || "Google sign-in failed.");
@@ -45,13 +51,15 @@ export default function AuthModal({ open, onClose, sessionId }) {
     <div className="auth-modal-backdrop" role="dialog" aria-modal="true">
       <div className="auth-modal">
         <header className="auth-modal-header">
-          <h2>Sign in to continue</h2>
+          <h2>{forConvert ? "Sign in to unlock 3D" : "Welcome back"}</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
             ×
           </button>
         </header>
         <p className="auth-modal-copy">
-          Sign in with Google to convert your booth concept to 3D and save your project.
+          {forConvert
+            ? "Sign in with Google to convert your booth concept into an interactive 3D model and save your project."
+            : "Sign in with Google anytime to save your booth projects and unlock 3D conversion."}
         </p>
 
         {error && (

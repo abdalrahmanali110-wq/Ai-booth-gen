@@ -45,13 +45,16 @@ export function clearStoredAuth() {
   setStoredAuth(null);
 }
 
-export function setPendingAuthSession(sessionId) {
+export function setPendingAuthSession(sessionId, { convert = false } = {}) {
   try {
     if (sessionId) {
       sessionStorage.setItem(PENDING_SESSION_KEY, sessionId);
-      sessionStorage.setItem(PENDING_CONVERT_KEY, "1");
     } else {
       sessionStorage.removeItem(PENDING_SESSION_KEY);
+    }
+    if (convert) {
+      sessionStorage.setItem(PENDING_CONVERT_KEY, "1");
+    } else {
       sessionStorage.removeItem(PENDING_CONVERT_KEY);
     }
   } catch {
