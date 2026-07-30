@@ -1487,8 +1487,8 @@
   font-size: 1.15rem;
 }
 
-.welcome-screen.compact .welcome-icon {
-  display: none;
+.welcome-screen.compact .welcome-suggestions {
+  justify-content: flex-start;
 }
 
 .booth-workspace {
