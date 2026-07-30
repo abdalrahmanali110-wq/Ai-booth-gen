@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from app.core.config import DEFAULT_USER_ID
@@ -8,6 +9,12 @@ from app.services.gemma_service import (
     chat_reply,
     extract_requirements_from_conversation,
 )
+from app.services.consultant_config import (
+    build_consultant_system_prompt,
+    user_confirmed_generation,
+)
+from app.providers.registry import get_llm_provider
+from app.providers.base import ProviderNotConfigured
 from app.services.image_service import generate_booth_image
 
 from app.services.budget_service import calculate_budget
@@ -270,58 +277,94 @@ def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
     complete = is_complete(requirements)
     missing = get_missing_fields(requirements)
     next_question = get_next_question(requirements)
+    awaiting_confirmation = complete and not user_confirmed_generation(user_message)
+    should_generate = complete and user_confirmed_generation(user_message)
 
     reasoning_details = None
     reply = None
 
-    if not complete and next_question:
-        reply = next_question
-    else:
-        llm_result = chat_reply(
-            history,
-            user_message,
-            requirements,
-            next_question=next_question,
+    # Prefer LLM consultant guided by booth designer config.
+    try:
+        provider = get_llm_provider()
+        system_prompt = build_consultant_system_prompt()
+        context = (
+            f"Current collected requirements JSON:\n{json.dumps(requirements, indent=2)}\n\n"
+            f"Missing fields: {', '.join(missing) if missing else 'none'}\n"
         )
-        if llm_result:
-            reply = llm_result.get("reply")
-            reasoning_details = llm_result.get("reasoning_details")
+        if awaiting_confirmation:
+            context += (
+                "All required fields appear collected. Summarize the booth briefly in plain "
+                "language and ask the user to confirm before generation (yes / looks good / proceed)."
+            )
+        elif next_question:
+            context += f"Ask only about the next missing detail. Hint: {next_question}"
+
+        llm_messages = [
+            *[{"role": m["role"], "content": m["content"]} for m in history],
+            {"role": "user", "content": user_message},
+            {"role": "system", "content": context},
+        ]
+        result = provider.chat(
+            llm_messages,
+            system_prompt=system_prompt,
+            temperature=0.5,
+        )
+        reply = result.content
+        reasoning_details = result.reasoning_details
+    except (ProviderNotConfigured, Exception):
+        reply = None
+
+    if not reply:
+        if awaiting_confirmation:
+            reply = (
+                "I have enough to draft your booth concept. "
+                "Reply with \"yes\" or \"looks good\" and I'll generate the image."
+            )
+        elif not complete and next_question:
+            reply = next_question
+        else:
+            fallback = chat_reply(
+                history,
+                user_message,
+                requirements,
+                next_question=next_question,
+            )
+            reply = (fallback or {}).get("reply") or next_question or (
+                "Tell me more about the booth you want to build."
+            )
 
     save_requirements(session_id, requirements)
     maybe_update_session_title(session_id, requirements)
 
-    if not reply:
-        reply = next_question or (
-            "Great, I have everything I need. Starting booth generation now."
-        )
-
+    # Never claim generation unless the backend will actually run it.
     jumped_to_generation = any(
         phrase in (reply or "").lower()
         for phrase in [
             "generating booth",
             "starting booth generation",
+            "starting booth image",
             "generate your booth",
             "create your booth",
         ]
     )
-
-    if jumped_to_generation and not complete:
-        next_question = get_next_question(requirements)
-        reply = (
-            f"I still need a few details before image generation. "
-            f"{next_question}"
-        )
-    elif complete:
-        reply = (
-            "Great, I have everything I need. "
-            "Starting booth image generation now..."
-        )
+    if jumped_to_generation and not should_generate:
+        if not complete:
+            reply = (
+                f"I still need a few details before image generation. "
+                f"{get_next_question(requirements)}"
+            )
+        else:
+            reply = (
+                "Here's what I have so far. If this looks right, reply with "
+                "\"yes\" or \"looks good\" and I'll generate your booth image."
+            )
 
     return {
         "reply": reply,
         "reasoning_details": reasoning_details,
         "requirements": requirements,
-        "requirements_complete": complete,
+        "requirements_complete": should_generate,
+        "awaiting_confirmation": awaiting_confirmation,
         "missing_fields": missing,
     }
 

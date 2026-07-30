@@ -31,6 +31,9 @@ export default function RequirementsPanel({
   onRegenerate,
   regenerating,
   regenerateError,
+  onConvertTo3D,
+  converting3d,
+  quota,
 }) {
   const hasRequirements = Object.values(requirements || {}).some(
     (value) => value !== null && value !== undefined && value !== ""
@@ -64,6 +67,12 @@ export default function RequirementsPanel({
         </header>
 
         <div className="details-panel-body">
+          {quota && (
+            <p className="details-quota">
+              {quota.remaining} of {quota.max} free image generations remaining
+            </p>
+          )}
+
           {!hasRequirements ? (
             <p className="details-empty">
               Requirements will appear here as you chat with the consultant.
@@ -119,10 +128,23 @@ export default function RequirementsPanel({
                 event.stopPropagation();
                 onRegenerate();
               }}
-              disabled={regenerating}
+              disabled={regenerating || (quota && quota.remaining <= 0)}
             >
               {regenerating ? "Generating booth image..." : "Regenerate booth image"}
             </button>
+            {onConvertTo3D && generationResult?.generated_image?.image_url && (
+              <button
+                type="button"
+                className="convert-3d-btn pressable"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onConvertTo3D();
+                }}
+                disabled={converting3d}
+              >
+                {converting3d ? "Converting to 3D..." : "Convert to 3D"}
+              </button>
+            )}
           </div>
         )}
       </aside>

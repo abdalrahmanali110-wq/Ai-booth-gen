@@ -1192,3 +1192,226 @@
     max-width: 92%;
   }
 }
+
+/* ── Lead-gen: quota, auth, 3D viewer ── */
+
+.details-quota {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.convert-3d-row {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.convert-3d-btn {
+  align-self: flex-start;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-elevated, var(--bg-elevated, #2a2f3a));
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.convert-3d-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.convert-3d-error {
+  margin: 0;
+  color: #e57373;
+  font-size: 0.85rem;
+}
+
+.details-panel-footer .convert-3d-btn {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.model-viewer {
+  margin-top: 0.9rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #12151c;
+}
+
+.model-viewer.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  margin: 0;
+  border-radius: 0;
+}
+
+.model-viewer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e8eaed;
+  font-size: 0.85rem;
+}
+
+.model-viewer-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.model-viewer-actions button {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: inherit;
+  border-radius: 8px;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.model-viewer-canvas {
+  height: 280px;
+}
+
+.model-viewer.fullscreen .model-viewer-canvas {
+  height: calc(100vh - 72px);
+}
+
+.model-viewer-hint {
+  margin: 0;
+  padding: 0.45rem 0.75rem 0.65rem;
+  font-size: 0.75rem;
+  color: rgba(232, 234, 237, 0.65);
+}
+
+.auth-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(8, 10, 14, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+.auth-modal {
+  width: min(420px, 100%);
+  background: var(--surface, #1c212b);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 1.1rem 1.15rem 1.2rem;
+  box-shadow: var(--shadow-soft);
+}
+
+.auth-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.auth-modal-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.auth-modal-copy {
+  margin: 0.55rem 0 1rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.auth-form input {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input, rgba(255, 255, 255, 0.04));
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.95rem;
+}
+
+.auth-submit {
+  margin-top: 0.35rem;
+  border: none;
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  background: var(--accent, #3d7eff);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.google-signin-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  width: 100%;
+  margin-top: 0.35rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  background: #fff;
+  color: #1f1f1f;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.google-signin-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+[data-theme="dark"] .google-signin-btn,
+:root:not([data-theme="light"]) .google-signin-btn {
+  background: #fff;
+  color: #1f1f1f;
+}
+
+.auth-error {
+  margin: 0;
+  color: #e57373;
+  font-size: 0.85rem;
+}
+
+.auth-switch {
+  margin-top: 0.85rem;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+

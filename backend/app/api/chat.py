@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 
 from app.core.config import DEFAULT_USER_ID
 from app.core.database import supabase
@@ -13,6 +13,12 @@ from app.services.agent_service import (
     get_session_generation_result,
     run_generation_pipeline,
 )
+from app.services.visitor_service import (
+    assert_can_generate,
+    get_or_create_visitor,
+    get_quota,
+    record_image_attempt,
+)
 
 router = APIRouter()
 
@@ -24,34 +30,74 @@ WELCOME_MESSAGE = (
 )
 
 
+def _resolve_visitor(x_visitor_id: str | None) -> dict:
+    try:
+        return get_or_create_visitor(x_visitor_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                f"Failed to resolve visitor: {exc}. "
+                "Run database/migrations/008_lead_gen_3d.sql in Supabase."
+            ),
+        ) from exc
+
+
+def _session_owned(session: dict, visitor_id: str | None) -> bool:
+    if not visitor_id:
+        return True
+    session_visitor = session.get("visitor_id")
+    if not session_visitor:
+        return True
+    return str(session_visitor) == str(visitor_id)
+
+
 @router.post("/session")
-def create_session(data: CreateSessionRequest):
+def create_session(
+    data: CreateSessionRequest,
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+):
+    visitor = _resolve_visitor(x_visitor_id)
     session = None
     last_error = None
 
     for attempt in range(3):
         try:
-            response = (
-                supabase.table("chat_sessions")
-                .insert(
-                    {
-                        "user_id": DEFAULT_USER_ID,
-                        "title": data.title,
-                    }
-                )
-                .execute()
-            )
+            payload = {
+                "user_id": DEFAULT_USER_ID,
+                "title": data.title,
+                "visitor_id": visitor["id"],
+                "anon": True,
+            }
+            response = supabase.table("chat_sessions").insert(payload).execute()
             session = response.data[0]
             break
         except Exception as exc:
             last_error = exc
+            # Retry without new columns if migration not applied yet
+            if attempt == 1:
+                try:
+                    response = (
+                        supabase.table("chat_sessions")
+                        .insert(
+                            {
+                                "user_id": DEFAULT_USER_ID,
+                                "title": data.title,
+                            }
+                        )
+                        .execute()
+                    )
+                    session = response.data[0]
+                    break
+                except Exception as inner:
+                    last_error = inner
             if attempt == 2:
                 raise HTTPException(
                     status_code=500,
                     detail=(
                         f"Failed to create chat session: {exc}. "
                         "Run database/migrations/005_sync_chat_schema.sql "
-                        "in Supabase."
+                        "and 008_lead_gen_3d.sql in Supabase."
                     ),
                 ) from exc
 
@@ -70,48 +116,81 @@ def create_session(data: CreateSessionRequest):
             }
         ).execute()
     except Exception:
-        # Session is still usable; frontend shows welcome from API response.
         pass
 
     return {
         "success": True,
         "session": session,
         "welcome_message": WELCOME_MESSAGE,
+        "visitor_id": visitor["id"],
+        "quota": get_quota(visitor_id=visitor["id"]),
+    }
+
+
+@router.get("/quota")
+def chat_quota(
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+):
+    visitor = _resolve_visitor(x_visitor_id)
+    return {
+        "success": True,
+        "visitor_id": visitor["id"],
+        "quota": get_quota(visitor_id=visitor["id"]),
     }
 
 
 @router.get("/sessions")
-def list_sessions(limit: int = 50):
-    response = (
-        supabase.table("chat_sessions")
-        .select("id, title, status, created_at, booth_request_id")
-        .eq("user_id", DEFAULT_USER_ID)
-        .order("created_at", desc=True)
-        .limit(limit)
-        .execute()
-    )
+def list_sessions(
+    limit: int = 50,
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+):
+    visitor = _resolve_visitor(x_visitor_id)
+    try:
+        response = (
+            supabase.table("chat_sessions")
+            .select("id, title, status, created_at, booth_request_id, visitor_id, anon")
+            .eq("visitor_id", visitor["id"])
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        sessions = response.data or []
+    except Exception:
+        response = (
+            supabase.table("chat_sessions")
+            .select("id, title, status, created_at, booth_request_id")
+            .eq("user_id", DEFAULT_USER_ID)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        sessions = response.data or []
 
     return {
         "success": True,
-        "sessions": response.data or [],
+        "sessions": sessions,
+        "visitor_id": visitor["id"],
+        "quota": get_quota(visitor_id=visitor["id"]),
     }
 
 
 @router.patch("/session/{session_id}")
-def update_session(session_id: str, data: UpdateSessionRequest):
+def update_session(
+    session_id: str,
+    data: UpdateSessionRequest,
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+):
     title = data.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Title cannot be empty")
 
     existing = (
-        supabase.table("chat_sessions")
-        .select("id")
-        .eq("id", session_id)
-        .eq("user_id", DEFAULT_USER_ID)
-        .execute()
+        supabase.table("chat_sessions").select("*").eq("id", session_id).execute()
     )
     if not existing.data:
         raise HTTPException(status_code=404, detail="Session not found")
+    if not _session_owned(existing.data[0], x_visitor_id):
+        raise HTTPException(status_code=403, detail="Session does not belong to visitor")
 
     response = (
         supabase.table("chat_sessions")
@@ -127,16 +206,17 @@ def update_session(session_id: str, data: UpdateSessionRequest):
 
 
 @router.delete("/session/{session_id}")
-def delete_session(session_id: str):
+def delete_session(
+    session_id: str,
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+):
     existing = (
-        supabase.table("chat_sessions")
-        .select("id")
-        .eq("id", session_id)
-        .eq("user_id", DEFAULT_USER_ID)
-        .execute()
+        supabase.table("chat_sessions").select("*").eq("id", session_id).execute()
     )
     if not existing.data:
         raise HTTPException(status_code=404, detail="Session not found")
+    if not _session_owned(existing.data[0], x_visitor_id):
+        raise HTTPException(status_code=403, detail="Session does not belong to visitor")
 
     try:
         supabase.table("chat_messages").delete().eq(
@@ -195,7 +275,11 @@ def get_messages(session_id: str):
 
 
 @router.post("/message")
-def send_message(data: ChatMessageRequest):
+def send_message(
+    data: ChatMessageRequest,
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+):
+    visitor = _resolve_visitor(x_visitor_id)
     session_response = (
         supabase.table("chat_sessions")
         .select("*")
@@ -205,6 +289,10 @@ def send_message(data: ChatMessageRequest):
 
     if not session_response.data:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    session = session_response.data[0]
+    if not _session_owned(session, visitor["id"]):
+        raise HTTPException(status_code=403, detail="Session does not belong to visitor")
 
     supabase.table("chat_messages").insert(
         {
@@ -217,15 +305,24 @@ def send_message(data: ChatMessageRequest):
     agent_result = generate_agent_reply(data.session_id, data.message)
     reply = agent_result["reply"]
     generation_result = None
+    quota = get_quota(visitor_id=visitor["id"])
 
     if agent_result["requirements_complete"]:
         try:
+            assert_can_generate(visitor_id=visitor["id"])
             generation_result = run_generation_pipeline(data.session_id)
+            record_image_attempt(
+                session_id=data.session_id,
+                visitor_id=visitor["id"],
+            )
+            quota = get_quota(visitor_id=visitor["id"])
             reply = (
                 "Your booth concept has been generated! "
-                "See the analysis below for UAE cost estimates and "
-                "recommended exhibition contractors."
+                "You can refine it while free generations remain, "
+                "or convert it to 3D after signing up."
             )
+        except PermissionError as exc:
+            reply = str(exc)
         except Exception as exc:
             error = str(exc).split("|")[0].strip()
             if len(error) > 180:
@@ -257,13 +354,20 @@ def send_message(data: ChatMessageRequest):
         "reply": reply,
         "requirements": agent_result["requirements"],
         "requirements_complete": agent_result["requirements_complete"],
+        "awaiting_confirmation": agent_result.get("awaiting_confirmation", False),
         "missing_fields": agent_result.get("missing_fields", []),
         "generation_result": generation_result,
+        "visitor_id": visitor["id"],
+        "quota": quota,
     }
 
 
 @router.post("/session/{session_id}/generate")
-def generate_from_session(session_id: str):
+def generate_from_session(
+    session_id: str,
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+):
+    visitor = _resolve_visitor(x_visitor_id)
     session_response = (
         supabase.table("chat_sessions")
         .select("*")
@@ -274,8 +378,16 @@ def generate_from_session(session_id: str):
     if not session_response.data:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    session = session_response.data[0]
+    if not _session_owned(session, visitor["id"]):
+        raise HTTPException(status_code=403, detail="Session does not belong to visitor")
+
     try:
+        assert_can_generate(visitor_id=visitor["id"])
         result = run_generation_pipeline(session_id)
+        record_image_attempt(session_id=session_id, visitor_id=visitor["id"])
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -284,4 +396,6 @@ def generate_from_session(session_id: str):
     return {
         "success": True,
         "result": result,
+        "visitor_id": visitor["id"],
+        "quota": get_quota(visitor_id=visitor["id"]),
     }

@@ -16,8 +16,13 @@
     { "source": "/design/session", "destination": "/api/index.py" },
     { "source": "/design/session/:path*", "destination": "/api/index.py" },
     { "source": "/chat/sessions", "destination": "/api/index.py" },
+    { "source": "/chat/session", "destination": "/api/index.py" },
+    { "source": "/chat/quota", "destination": "/api/index.py" },
     { "source": "/chat/message", "destination": "/api/index.py" },
     { "source": "/chat/session/:path*", "destination": "/api/index.py" },
+    { "source": "/auth/:path*", "destination": "/api/index.py" },
+    { "source": "/projects/:path*", "destination": "/api/index.py" },
+    { "source": "/models3d/:path*", "destination": "/api/index.py" },
     { "source": "/health", "destination": "/api/index.py" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]

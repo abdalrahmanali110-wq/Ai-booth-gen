@@ -10,6 +10,7 @@ DEFAULT_IMAGE_MODEL = "black-forest-labs/FLUX.1-schnell"
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY")
 
 HUGGINGFACE_API_KEY = os.getenv("HUGGINGFACE_API_KEY")
 
@@ -27,8 +28,21 @@ GEMMA_MODEL = os.getenv(
     "google/gemma-4-31b-it:free",
 )
 
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemma").strip().lower()
+IMAGE_PROVIDER = os.getenv("IMAGE_PROVIDER", "huggingface").strip().lower()
+MODEL_3D_PROVIDER = os.getenv("MODEL_3D_PROVIDER", "huggingface_3d").strip().lower()
+MODEL_3D_HF_ENDPOINT = os.getenv("MODEL_3D_HF_ENDPOINT", "")
+ANON_MAX_IMAGE_GENERATIONS = int(os.getenv("ANON_MAX_IMAGE_GENERATIONS", "3"))
+
+
 def _resolve_image_model() -> str:
     raw = (os.getenv("IMAGE_MODEL") or DEFAULT_IMAGE_MODEL).strip()
+    # When Riverflow is the selected provider, allow riverflow model slugs.
+    if IMAGE_PROVIDER in {"riverflow", "sourceful"}:
+        if "riverflow" in raw.lower() or "sourceful" in raw.lower():
+            return raw
+        return "sourceful/riverflow-v2.5-fast"
+
     lowered = raw.lower()
     if any(
         marker in lowered

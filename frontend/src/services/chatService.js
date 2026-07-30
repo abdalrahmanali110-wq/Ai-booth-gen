@@ -5,6 +5,11 @@ export async function listSessions() {
   return data;
 }
 
+export async function getQuota() {
+  const { data } = await api.get("/chat/quota");
+  return data;
+}
+
 export async function createSession(title = "New Booth Consultation") {
   const { data } = await api.post("/chat/session", { title });
   return data;

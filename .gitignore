@@ -9,3 +9,4 @@ build/
 backend/generated_pdfs/
 frontend/dist/
 .vscode/
+.vercel

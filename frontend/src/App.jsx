@@ -8,11 +8,11 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/design" replace />} />
-        <Route path="/design" element={<Design />} />
-        <Route path="/design/:sessionId" element={<Design />} />
+        <Route path="/" element={<Navigate to="/chat" replace />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/chat/:sessionId" element={<Chat />} />
+        <Route path="/design" element={<Design />} />
+        <Route path="/design/:sessionId" element={<Design />} />
       </Routes>
     </BrowserRouter>
   );

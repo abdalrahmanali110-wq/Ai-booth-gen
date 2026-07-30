@@ -1,5 +1,6 @@
 import { memo } from "react";
 import ConsultationReport from "./ConsultationReport";
+import ModelViewer from "./ModelViewer";
 
 const Message = memo(function Message({ role, message }) {
   return (
@@ -21,6 +22,10 @@ export default memo(function MessageList({
   generationImageUrl,
   consultationReport,
   bottomRef,
+  onConvertTo3D,
+  converting3d,
+  modelUrl,
+  modelStatus,
 }) {
   return (
     <>
@@ -39,7 +44,7 @@ export default memo(function MessageList({
             </div>
             <p className="loading-label">
               {requirementsComplete
-                ? "Generating booth image and searching UAE contractors — this may take a minute"
+                ? "Generating booth image — this may take a minute"
                 : "Thinking"}
             </p>
           </div>
@@ -58,6 +63,26 @@ export default memo(function MessageList({
                 decoding="async"
               />
             </div>
+            {onConvertTo3D && (
+              <div className="convert-3d-row">
+                <button
+                  type="button"
+                  className="convert-3d-btn pressable"
+                  onClick={onConvertTo3D}
+                  disabled={converting3d || modelStatus === "PROCESSING"}
+                >
+                  {converting3d || modelStatus === "PROCESSING"
+                    ? "Converting to 3D..."
+                    : modelUrl
+                      ? "Regenerate 3D model"
+                      : "Convert to 3D"}
+                </button>
+                {modelStatus === "FAILED" && (
+                  <p className="convert-3d-error">3D conversion failed. Try again.</p>
+                )}
+              </div>
+            )}
+            {modelUrl && <ModelViewer modelUrl={modelUrl} />}
           </div>
         </div>
       )}

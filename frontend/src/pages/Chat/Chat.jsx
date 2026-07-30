@@ -14,11 +14,22 @@ import {
   deleteSession,
   generateBooth,
   getMessages,
+  getQuota,
   getSession,
   listSessions,
   sendMessage,
   updateSession,
 } from "../../services/chatService";
+import { createModel3D, getModel3DJob } from "../../services/model3dService";
+import { completeOAuth } from "../../services/authService";
+import { getSupabaseClient } from "../../services/supabaseClient";
+import {
+  consumePendingConvert,
+  getPendingAuthSession,
+  getStoredAuth,
+  setStoredAuth,
+} from "../../services/storage";
+import AuthModal from "../../components/AuthModal";
 import { useTheme } from "../../hooks/useTheme";
 
 const DEFAULT_TITLE = "New Booth Consultation";
@@ -57,6 +68,11 @@ export default function Chat() {
   const [regenerateError, setRegenerateError] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(() => !isMobileViewport());
   const [isMobile, setIsMobile] = useState(isMobileViewport);
+  const [quota, setQuota] = useState({ used: 0, remaining: 3, max: 3 });
+  const [authUser, setAuthUser] = useState(() => getStoredAuth());
+  const [authOpen, setAuthOpen] = useState(false);
+  const [converting3d, setConverting3d] = useState(false);
+  const [modelJob, setModelJob] = useState(null);
 
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
@@ -68,10 +84,20 @@ export default function Chat() {
     try {
       const data = await listSessions();
       setSessions(data.sessions || []);
+      if (data.quota) setQuota(data.quota);
     } catch {
       setSessions([]);
     } finally {
       setSessionsLoading(false);
+    }
+  }, []);
+
+  const refreshQuota = useCallback(async () => {
+    try {
+      const data = await getQuota();
+      if (data.quota) setQuota(data.quota);
+    } catch {
+      // ignore until migration applied
     }
   }, []);
 
@@ -106,6 +132,7 @@ export default function Chat() {
         Object.values(sessionData.requirements || {}).filter(Boolean).length >= 6
       );
       setGenerationResult(sessionData.generation_result || null);
+      setModelJob(null);
       setRegenerateError("");
       shouldScrollRef.current = true;
     } catch (err) {
@@ -122,7 +149,9 @@ export default function Chat() {
 
   useEffect(() => {
     refreshSessions();
-  }, [refreshSessions]);
+    refreshQuota();
+  }, [refreshSessions, refreshQuota]);
+
 
   useEffect(() => {
     let timeoutId = null;
@@ -209,6 +238,8 @@ export default function Chat() {
 
     try {
       const data = await createSession();
+      if (data.quota) setQuota(data.quota);
+      setModelJob(null);
       await refreshSessions();
       navigate(`/chat/${data.session.id}`);
     } catch (err) {
@@ -278,6 +309,7 @@ export default function Chat() {
     try {
       const data = await generateBooth(sessionId);
       setGenerationResult(data.result);
+      if (data.quota) setQuota(data.quota);
       shouldScrollRef.current = true;
       setMessages((prev) => [
         ...prev,
@@ -285,7 +317,7 @@ export default function Chat() {
           id: `assistant-gen-${Date.now()}`,
           role: "assistant",
           message:
-            "Your booth concept has been regenerated. See the updated analysis below for UAE cost estimates and contractors.",
+            "Your booth concept has been regenerated. See the updated analysis below.",
         },
       ]);
     } catch (err) {
@@ -297,6 +329,127 @@ export default function Chat() {
       setRegenerating(false);
     }
   }, [sessionId, regenerating]);
+
+  const runConvertTo3D = useCallback(
+    async (auth) => {
+      const imageUrl = generationResult?.generated_image?.image_url;
+      const imageId = generationResult?.generated_image?.id;
+      if (!sessionId || !imageUrl || !auth?.auth_user_id) return;
+
+      setConverting3d(true);
+      setError("");
+      try {
+        const data = await createModel3D(sessionId, {
+          source_image_url: imageUrl,
+          source_image_id: imageId,
+          auth_user_id: auth.auth_user_id,
+          process_now: true,
+        });
+        let job = data.job;
+        setModelJob(job);
+
+        // Poll if still pending/processing
+        let tries = 0;
+        while (
+          job &&
+          ["PENDING", "PROCESSING"].includes(job.status) &&
+          tries < 40
+        ) {
+          await new Promise((r) => setTimeout(r, 2000));
+          const polled = await getModel3DJob(job.id);
+          job = polled.job;
+          setModelJob(job);
+          tries += 1;
+        }
+      } catch (err) {
+        setError(err.response?.data?.detail || "Failed to convert to 3D.");
+      } finally {
+        setConverting3d(false);
+      }
+    },
+    [sessionId, generationResult]
+  );
+
+  const handleConvertTo3D = useCallback(() => {
+    const auth = authUser || getStoredAuth();
+    if (!auth?.auth_user_id) {
+      setAuthOpen(true);
+      return;
+    }
+    runConvertTo3D(auth);
+  }, [authUser, runConvertTo3D]);
+
+  // Complete Google OAuth after redirect back from Google / Supabase.
+  useEffect(() => {
+    const hasOAuthReturn =
+      window.location.search.includes("code=") ||
+      window.location.hash.includes("access_token");
+    const pendingSessionId = getPendingAuthSession();
+    if (!hasOAuthReturn && !pendingSessionId) return undefined;
+
+    let cancelled = false;
+
+    async function finishGoogleAuth() {
+      try {
+        const supabase = await getSupabaseClient();
+        // Give supabase-js a moment to exchange the OAuth code if present.
+        if (hasOAuthReturn) {
+          await new Promise((r) => setTimeout(r, 300));
+        }
+
+        const { data } = await supabase.auth.getSession();
+        const session = data?.session;
+        if (!session?.access_token || cancelled) return;
+
+        const claimSessionId =
+          pendingSessionId || sessionId || routeSessionId || undefined;
+        const result = await completeOAuth({
+          access_token: session.access_token,
+          session_id: claimSessionId,
+        });
+
+        if (cancelled) return;
+
+        const auth = {
+          auth_user_id: result.auth?.auth_user_id,
+          access_token: result.auth?.access_token || session.access_token,
+          email: result.auth?.email || session.user?.email,
+          name: result.auth?.name || null,
+        };
+        setStoredAuth(auth);
+        setAuthUser(auth);
+        setAuthOpen(false);
+
+        // Clean OAuth params from the URL without a full reload.
+        if (hasOAuthReturn) {
+          const clean = claimSessionId
+            ? `/chat/${claimSessionId}`
+            : "/chat";
+          window.history.replaceState({}, "", clean);
+        }
+
+        const shouldConvert = consumePendingConvert();
+        if (shouldConvert) {
+          setTimeout(() => {
+            if (!cancelled) runConvertTo3D(auth);
+          }, 500);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err.response?.data?.detail ||
+              err.message ||
+              "Google sign-in failed."
+          );
+        }
+      }
+    }
+
+    finishGoogleAuth();
+    return () => {
+      cancelled = true;
+    };
+  }, [routeSessionId, sessionId, runConvertTo3D]);
 
   const handleSend = useCallback(
     async (event) => {
@@ -312,6 +465,7 @@ export default function Chat() {
           setSessionId(activeId);
           navigate(`/chat/${activeId}`, { replace: true });
           setSessions((prev) => [data.session, ...prev]);
+          if (data.quota) setQuota(data.quota);
         } catch (err) {
           setError(err.response?.data?.detail || "Failed to create session.");
           return;
@@ -344,6 +498,7 @@ export default function Chat() {
         ]);
         setRequirements(data.requirements || {});
         setRequirementsComplete(Boolean(data.requirements_complete));
+        if (data.quota) setQuota(data.quota);
 
         if (data.generation_result) {
           setGenerationResult(data.generation_result);
@@ -439,7 +594,9 @@ export default function Chat() {
 
           <div className="topbar-title">
             <h1>{activeSession?.title || "Booth consultation"}</h1>
-            <p>AI exhibition consultant</p>
+            <p>
+              {quota.remaining} of {quota.max} free generations remaining
+            </p>
           </div>
 
           <button
@@ -496,6 +653,10 @@ export default function Chat() {
               generationImageUrl={generationImageUrl}
               consultationReport={consultationReport}
               bottomRef={bottomRef}
+              onConvertTo3D={generationImageUrl ? handleConvertTo3D : null}
+              converting3d={converting3d}
+              modelUrl={modelJob?.model_url || null}
+              modelStatus={modelJob?.status || null}
             />
           </div>
         </main>
@@ -568,6 +729,15 @@ export default function Chat() {
         onRegenerate={handleRegenerate}
         regenerating={regenerating}
         regenerateError={regenerateError}
+        onConvertTo3D={generationImageUrl ? handleConvertTo3D : null}
+        converting3d={converting3d}
+        quota={quota}
+      />
+
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        sessionId={sessionId}
       />
     </div>
   );

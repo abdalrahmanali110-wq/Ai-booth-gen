@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import SITE_URL
 from app.api.chat import router as chat_router
 from app.api.questionnaire import router as questionnaire_router
+from app.api.auth import router as auth_router
+from app.api.models3d import router as models3d_router
 
 app = FastAPI(
     title="AI Booth Generator API",
@@ -32,6 +34,18 @@ app.include_router(
     questionnaire_router,
     prefix="/design",
     tags=["Design Questionnaire"],
+)
+
+app.include_router(
+    auth_router,
+    prefix="/auth",
+    tags=["Auth"],
+)
+
+# Claim lives under /auth/projects/... ; 3D routes are mounted at root paths
+app.include_router(
+    models3d_router,
+    tags=["Models3D"],
 )
 
 
