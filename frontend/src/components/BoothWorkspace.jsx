@@ -28,6 +28,7 @@ export default function BoothWorkspace({
   imageUrl,
   modelUrl,
   modelStatus,
+  modelError,
   loading,
   regenerating,
   converting3d,
@@ -42,14 +43,16 @@ export default function BoothWorkspace({
     formatStepValue(step.key, requirements[step.key])
   );
   const progress = Math.round((filled.length / BUILD_STEPS.length) * 100);
-  const busy = loading || regenerating || converting3d || modelStatus === "PROCESSING";
-  const busyLabel = converting3d || modelStatus === "PROCESSING"
-    ? "Building your 3D model..."
-    : regenerating
-      ? "Refining your booth concept..."
-      : loading
-        ? "Updating your brief..."
-        : "";
+  const busy =
+    loading || regenerating || converting3d || modelStatus === "PROCESSING";
+  const busyLabel =
+    converting3d || modelStatus === "PROCESSING"
+      ? "Building your 3D model..."
+      : regenerating
+        ? "Refining your booth concept..."
+        : loading
+          ? "Updating your brief..."
+          : "";
   const briefReady = isBriefReady(requirements) || Boolean(imageUrl);
 
   const greetingName =
@@ -81,12 +84,20 @@ export default function BoothWorkspace({
               <span className="workspace-user" title={authUser.email}>
                 {greetingName || authUser.email}
               </span>
-              <button type="button" className="workspace-ghost-btn pressable" onClick={onSignOut}>
+              <button
+                type="button"
+                className="workspace-ghost-btn pressable"
+                onClick={onSignOut}
+              >
                 Sign out
               </button>
             </>
           ) : (
-            <button type="button" className="workspace-signin-btn pressable" onClick={onSignIn}>
+            <button
+              type="button"
+              className="workspace-signin-btn pressable"
+              onClick={onSignIn}
+            >
               Sign in
             </button>
           )}
@@ -96,7 +107,11 @@ export default function BoothWorkspace({
       <div className="workspace-progress-block">
         <div className="workspace-progress-meta">
           <span>{progress}% brief complete</span>
-          <span>{quotaUnlimited ? "Testing mode · unlimited images" : "Free images available"}</span>
+          <span>
+            {quotaUnlimited
+              ? "Testing mode · unlimited images"
+              : "Free images available"}
+          </span>
         </div>
         <div
           className="workspace-progress-track"
@@ -107,14 +122,16 @@ export default function BoothWorkspace({
         >
           <div
             className={`workspace-progress-fill${busy ? " pulsing" : ""}`}
-            style={{ width: `${busy ? Math.min(92, Math.max(progress, 18)) : progress}%` }}
+            style={{
+              width: `${busy ? Math.min(92, Math.max(progress, 18)) : progress}%`,
+            }}
           />
         </div>
         {busy && <p className="workspace-busy-label">{busyLabel}</p>}
       </div>
 
-      <div className={`workspace-stage${busy ? " building" : ""}${imageUrl ? " has-image" : ""}`}>
-        {!imageUrl && (
+      {!imageUrl && (
+        <div className={`workspace-stage${busy ? " building" : ""}`}>
           <div className="booth-skeleton" aria-hidden="true">
             <div className={`skel-floor${filled.length >= 1 ? " on" : ""}`} />
             <div className={`skel-wall left${filled.length >= 2 ? " on" : ""}`} />
@@ -124,26 +141,66 @@ export default function BoothWorkspace({
             <div className={`skel-light${filled.length >= 6 ? " on" : ""}`} />
             {busy && <div className="skel-scan" />}
           </div>
-        )}
+          {filled.length === 0 && !busy && (
+            <div className="workspace-empty">
+              <p>
+                Chat with the consultant — this side builds your booth as you
+                answer.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
-        {imageUrl && (
-          <div className="workspace-image-wrap">
-            <img src={imageUrl} alt="Generated booth concept" />
-          </div>
-        )}
+      {imageUrl && (
+        <figure className="workspace-photo">
+          <img src={imageUrl} alt="Generated booth concept" />
+          <figcaption>
+            <a href={imageUrl} target="_blank" rel="noreferrer">
+              Open full image
+            </a>
+          </figcaption>
+        </figure>
+      )}
 
-        {modelUrl && (
-          <div className="workspace-model-wrap">
-            <ModelViewer modelUrl={modelUrl} />
-          </div>
-        )}
+      {imageUrl && (
+        <div className="workspace-actions sticky-actions">
+          <button
+            type="button"
+            className="workspace-secondary-btn pressable"
+            onClick={onRegenerate}
+            disabled={regenerating}
+          >
+            {regenerating ? "Regenerating..." : "Regenerate image"}
+          </button>
+          <button
+            type="button"
+            className="workspace-primary-btn pressable"
+            onClick={onConvertTo3D}
+            disabled={converting3d || modelStatus === "PROCESSING"}
+          >
+            {converting3d || modelStatus === "PROCESSING"
+              ? "Converting to 3D..."
+              : modelUrl
+                ? "Rebuild 3D model"
+                : authUser?.auth_user_id || quotaUnlimited
+                  ? "Generate 3D model"
+                  : "Sign in to generate 3D"}
+          </button>
+        </div>
+      )}
 
-        {!imageUrl && filled.length === 0 && !busy && (
-          <div className="workspace-empty">
-            <p>Chat with the consultant — this side builds your booth as you answer.</p>
-          </div>
-        )}
-      </div>
+      {modelError && (
+        <p className="workspace-model-error" role="alert">
+          {modelError}
+        </p>
+      )}
+
+      {modelUrl && (
+        <div className="workspace-model-wrap">
+          <ModelViewer modelUrl={modelUrl} />
+        </div>
+      )}
 
       {briefReady ? (
         <ProjectBrief requirements={requirements} />
@@ -163,36 +220,6 @@ export default function BoothWorkspace({
           })}
         </ul>
       )}
-
-      <div className="workspace-actions">
-        {imageUrl && (
-          <button
-            type="button"
-            className="workspace-secondary-btn pressable"
-            onClick={onRegenerate}
-            disabled={regenerating}
-          >
-            {regenerating ? "Regenerating..." : "Regenerate image"}
-          </button>
-        )}
-
-        {imageUrl && (
-          <button
-            type="button"
-            className="workspace-primary-btn pressable"
-            onClick={onConvertTo3D}
-            disabled={converting3d || modelStatus === "PROCESSING"}
-          >
-            {converting3d || modelStatus === "PROCESSING"
-              ? "Converting to 3D..."
-              : modelUrl
-                ? "Rebuild 3D model"
-                : authUser?.auth_user_id
-                  ? "Generate 3D model"
-                  : "Sign in to generate 3D"}
-          </button>
-        )}
-      </div>
     </section>
   );
 }

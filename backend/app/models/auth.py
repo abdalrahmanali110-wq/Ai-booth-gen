@@ -36,5 +36,5 @@ class CreateModel3DRequest(BaseModel):
     source_image_url: str
     source_image_id: str | None = None
     prompt: str | None = None
-    auth_user_id: str
+    auth_user_id: str | None = None
     process_now: bool = True

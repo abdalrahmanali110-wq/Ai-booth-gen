@@ -343,19 +343,25 @@ export default function Chat() {
     async (auth) => {
       const imageUrl = generationResult?.generated_image?.image_url;
       const imageId = generationResult?.generated_image?.id;
-      if (!sessionId || !imageUrl || !auth?.auth_user_id) return;
+      if (!sessionId || !imageUrl) return;
 
       setConverting3d(true);
       setError("");
+      setModelJob(null);
       try {
         const data = await createModel3D(sessionId, {
           source_image_url: imageUrl,
           source_image_id: imageId,
-          auth_user_id: auth.auth_user_id,
+          auth_user_id: auth?.auth_user_id || undefined,
           process_now: true,
         });
         let job = data.job;
         setModelJob(job);
+
+        if (job?.status === "FAILED") {
+          setError(job.error || "3D conversion failed.");
+          return;
+        }
 
         // Poll if still pending/processing
         let tries = 0;
@@ -365,10 +371,15 @@ export default function Chat() {
           tries < 40
         ) {
           await new Promise((r) => setTimeout(r, 2000));
+          if (String(job.id).startsWith("local-")) break;
           const polled = await getModel3DJob(job.id);
           job = polled.job;
           setModelJob(job);
           tries += 1;
+        }
+
+        if (job?.status === "FAILED") {
+          setError(job.error || "3D conversion failed.");
         }
       } catch (err) {
         setError(err.response?.data?.detail || "Failed to convert to 3D.");
@@ -381,13 +392,14 @@ export default function Chat() {
 
   const handleConvertTo3D = useCallback(() => {
     const auth = authUser || getStoredAuth();
-    if (!auth?.auth_user_id) {
+    const unlimited = Boolean(quota?.unlimited) || quota?.max >= 999;
+    if (!auth?.auth_user_id && !unlimited) {
       setAuthIntent("convert");
       setAuthOpen(true);
       return;
     }
-    runConvertTo3D(auth);
-  }, [authUser, runConvertTo3D]);
+    runConvertTo3D(auth || { auth_user_id: null });
+  }, [authUser, runConvertTo3D, quota]);
 
   const handleSignIn = useCallback(() => {
     setAuthIntent("signin");
@@ -815,6 +827,7 @@ export default function Chat() {
             imageUrl={generationImageUrl}
             modelUrl={modelJob?.model_url || null}
             modelStatus={modelJob?.status || null}
+            modelError={modelJob?.status === "FAILED" ? modelJob?.error : null}
             loading={loading}
             regenerating={regenerating}
             converting3d={converting3d}

@@ -6,7 +6,7 @@ function Model({ url }) {
   const { scene } = useGLTF(url);
   return (
     <Center>
-      <primitive object={scene} />
+      <primitive object={scene.clone()} />
     </Center>
   );
 }
@@ -15,6 +15,10 @@ export default function ModelViewer({ modelUrl, onClose }) {
   const [fullscreen, setFullscreen] = useState(false);
 
   if (!modelUrl) return null;
+
+  const resolvedUrl = modelUrl.startsWith("http")
+    ? modelUrl
+    : `${window.location.origin}${modelUrl.startsWith("/") ? "" : "/"}${modelUrl}`;
 
   return (
     <div className={`model-viewer${fullscreen ? " fullscreen" : ""}`}>
@@ -41,7 +45,7 @@ export default function ModelViewer({ modelUrl, onClose }) {
           <ambientLight intensity={0.7} />
           <directionalLight position={[4, 6, 2]} intensity={1.1} />
           <Suspense fallback={null}>
-            <Model url={modelUrl} />
+            <Model url={resolvedUrl} />
             <Environment preset="city" />
           </Suspense>
           <OrbitControls makeDefault enableDamping />
