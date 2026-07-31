@@ -43,13 +43,13 @@ def get_image_provider() -> ImageGenerationProvider:
 
 
 def get_model3d_provider() -> Model3DGenerationProvider:
-    name = (config.MODEL_3D_PROVIDER or "huggingface_3d").strip().lower()
+    name = (config.MODEL_3D_PROVIDER or "tripo").strip().lower()
+    if name == "tripo":
+        return TripoProvider()
     if name in {"huggingface_3d", "opensource", "hf_3d"}:
         return HuggingFace3DProvider()
     if name in {"stub", "stub_glb", "demo"}:
         return StubGLBProvider()
-    if name == "tripo":
-        return TripoProvider()
     raise ProviderNotConfigured(f"Unknown MODEL_3D_PROVIDER={name}")
 
 

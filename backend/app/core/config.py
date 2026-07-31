@@ -30,7 +30,7 @@ GEMMA_MODEL = os.getenv(
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemma").strip().lower()
 IMAGE_PROVIDER = os.getenv("IMAGE_PROVIDER", "huggingface").strip().lower()
-MODEL_3D_PROVIDER = os.getenv("MODEL_3D_PROVIDER", "huggingface_3d").strip().lower()
+MODEL_3D_PROVIDER = os.getenv("MODEL_3D_PROVIDER", "tripo").strip().lower()
 MODEL_3D_HF_ENDPOINT = os.getenv("MODEL_3D_HF_ENDPOINT", "")
 TRIPO_API_KEY = os.getenv("TRIPO_API_KEY", "")
 TRIPO_MODEL = os.getenv("TRIPO_MODEL", "v3.1-20260211")
