@@ -153,12 +153,14 @@ function SessionSidebar({
   sessions,
   activeSessionId,
   loading,
+  historyLocked,
   theme,
   onToggleTheme,
   onNewChat,
   onSelectSession,
   onRenameSession,
   onDeleteSession,
+  onSignIn,
 }) {
   return (
     <aside className="session-sidebar">
@@ -184,6 +186,19 @@ function SessionSidebar({
         <p className="session-list-label">History</p>
         {loading ? (
           <p className="session-empty">Loading sessions...</p>
+        ) : historyLocked ? (
+          <div className="history-locked">
+            <p className="session-empty">
+              Sign in to save and revisit your booth consultations.
+            </p>
+            <button
+              type="button"
+              className="history-signin-btn pressable"
+              onClick={onSignIn}
+            >
+              Sign in with Google
+            </button>
+          </div>
         ) : sessions.length === 0 ? (
           <p className="session-empty">No conversations yet</p>
         ) : (

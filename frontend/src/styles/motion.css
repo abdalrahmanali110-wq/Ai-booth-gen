@@ -3,7 +3,7 @@
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -23,7 +23,7 @@
 @keyframes scale-in {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    transform: scale(0.97);
   }
   to {
     opacity: 1;
@@ -50,54 +50,88 @@
   }
 }
 
+@keyframes photo-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* ── Message entrance ── */
 
 .message {
-  animation: fade-up 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fade-up 0.48s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .message.assistant {
-  animation-duration: 0.42s;
+  animation-duration: 0.55s;
 }
 
 /* ── Welcome screen stagger ── */
 
 .welcome-screen .welcome-icon {
-  animation: scale-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: scale-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .welcome-screen h2 {
-  animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
+  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.06s both;
 }
 
 .welcome-screen > p {
-  animation: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.14s both;
+  animation: fade-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
 }
 
 .welcome-suggestions .suggestion-chip {
-  animation: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.welcome-suggestions .suggestion-chip:nth-child(1) {
-  animation-delay: 0.2s;
+.welcome-suggestions .suggestion-chip:nth-child(1) { animation-delay: 0.16s; }
+.welcome-suggestions .suggestion-chip:nth-child(2) { animation-delay: 0.22s; }
+.welcome-suggestions .suggestion-chip:nth-child(3) { animation-delay: 0.28s; }
+.welcome-suggestions .suggestion-chip:nth-child(4) { animation-delay: 0.34s; }
+.welcome-suggestions .suggestion-chip:nth-child(5) { animation-delay: 0.4s; }
+.welcome-suggestions .suggestion-chip:nth-child(6) { animation-delay: 0.46s; }
+.welcome-suggestions .suggestion-chip:nth-child(7) { animation-delay: 0.52s; }
+
+/* ── Quick replies ── */
+
+.quick-replies .quick-reply-chip {
+  animation: fade-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.welcome-suggestions .suggestion-chip:nth-child(2) {
-  animation-delay: 0.28s;
+.quick-replies .quick-reply-chip:nth-child(1) { animation-delay: 0.02s; }
+.quick-replies .quick-reply-chip:nth-child(2) { animation-delay: 0.06s; }
+.quick-replies .quick-reply-chip:nth-child(3) { animation-delay: 0.1s; }
+.quick-replies .quick-reply-chip:nth-child(4) { animation-delay: 0.14s; }
+
+/* ── Workspace ── */
+
+.workspace-photo {
+  animation: photo-reveal 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.welcome-suggestions .suggestion-chip:nth-child(3) {
-  animation-delay: 0.36s;
+.workspace-steps li {
+  transition:
+    opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.workspace-progress-fill {
+  transition: width 0.55s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ── Details panel content ── */
 
 .details-panel.open .details-panel-header {
-  animation: fade-in 0.3s ease both;
+  animation: fade-in 0.35s ease both;
 }
 
 .details-panel.open .details-row {
-  animation: fade-up 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .details-panel.open .details-row:nth-child(1) { animation-delay: 0.04s; }
@@ -112,32 +146,33 @@
 .details-panel.open .details-consultation,
 .details-panel.open .details-panel-footer,
 .details-panel.open .details-empty {
-  animation: fade-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+  animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
 }
 
 /* ── Image card ── */
 
 .inline-image-card {
-  animation: scale-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: scale-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .inline-image-card img {
-  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .inline-image-card:hover img {
-  transform: scale(1.015);
+  transform: scale(1.012);
 }
 
 /* ── Interactive press feedback ── */
 
 .pressable {
   transition:
-    transform 0.15s cubic-bezier(0.22, 1, 0.36, 1),
-    background 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    color 0.15s ease;
+    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    background 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    color 0.22s ease,
+    opacity 0.22s ease;
 }
 
 .pressable:hover {
@@ -145,7 +180,17 @@
 }
 
 .pressable:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.985);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ── Focus rings ── */

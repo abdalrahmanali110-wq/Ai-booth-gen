@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getVisitorId, setVisitorId } from "./storage";
+import { getStoredAuth, getVisitorId, setVisitorId } from "./storage";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "",
@@ -12,6 +12,10 @@ api.interceptors.request.use((config) => {
   const visitorId = getVisitorId();
   if (visitorId) {
     config.headers["X-Visitor-Id"] = visitorId;
+  }
+  const auth = getStoredAuth();
+  if (auth?.auth_user_id) {
+    config.headers["X-Auth-User-Id"] = auth.auth_user_id;
   }
   return config;
 });

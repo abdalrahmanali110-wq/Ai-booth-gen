@@ -57,6 +57,9 @@ export default function Chat() {
 
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [historyLocked, setHistoryLocked] = useState(
+    () => !getStoredAuth()?.auth_user_id
+  );
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [requirements, setRequirements] = useState({});
@@ -90,12 +93,31 @@ export default function Chat() {
   const loadingSessionRef = useRef(null);
 
   const refreshSessions = useCallback(async () => {
+    const signedIn = Boolean(getStoredAuth()?.auth_user_id);
+    // Client-side gate: never show history without Google sign-in,
+    // even if an older API still returns sessions.
+    if (!signedIn) {
+      setHistoryLocked(true);
+      setSessions([]);
+      try {
+        const data = await listSessions();
+        if (data.quota) setQuota(data.quota);
+      } catch {
+        // ignore
+      } finally {
+        setSessionsLoading(false);
+      }
+      return;
+    }
+
     try {
       const data = await listSessions();
-      setSessions(data.sessions || []);
+      setHistoryLocked(Boolean(data.history_locked));
+      setSessions(data.history_locked ? [] : data.sessions || []);
       if (data.quota) setQuota(data.quota);
     } catch {
       setSessions([]);
+      setHistoryLocked(true);
     } finally {
       setSessionsLoading(false);
     }
@@ -392,23 +414,71 @@ export default function Chat() {
 
   const handleConvertTo3D = useCallback(() => {
     const auth = authUser || getStoredAuth();
-    const unlimited = Boolean(quota?.unlimited) || quota?.max >= 999;
-    if (!auth?.auth_user_id && !unlimited) {
+    if (!auth?.auth_user_id) {
       setAuthIntent("convert");
       setAuthOpen(true);
       return;
     }
-    runConvertTo3D(auth || { auth_user_id: null });
-  }, [authUser, runConvertTo3D, quota]);
+    runConvertTo3D(auth);
+  }, [authUser, runConvertTo3D]);
 
   const handleSignIn = useCallback(() => {
     setAuthIntent("signin");
     setAuthOpen(true);
   }, []);
 
+  const handleDownloadImage = useCallback(async () => {
+    const imageUrl = generationResult?.generated_image?.image_url;
+    if (!imageUrl) return;
+
+    try {
+      const response = await fetch(imageUrl);
+      if (!response.ok) throw new Error("Download failed");
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "booth-concept.jpg";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(imageUrl, "_blank", "noopener,noreferrer");
+    }
+  }, [generationResult]);
+
+  const handleExportModel = useCallback(async () => {
+    const modelUrl = modelJob?.model_url;
+    if (!modelUrl) return;
+
+    const resolvedUrl = modelUrl.startsWith("http")
+      ? modelUrl
+      : `${window.location.origin}${modelUrl.startsWith("/") ? "" : "/"}${modelUrl}`;
+
+    try {
+      const response = await fetch(resolvedUrl);
+      if (!response.ok) throw new Error("Export failed");
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = "booth-model.glb";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      window.open(resolvedUrl, "_blank", "noopener,noreferrer");
+    }
+  }, [modelJob]);
+
   const handleSignOut = useCallback(async () => {
     clearStoredAuth();
     setAuthUser(null);
+    setHistoryLocked(true);
+    setSessions([]);
+    setModelJob(null);
     try {
       const supabase = await getSupabaseClient();
       await supabase.auth.signOut();
@@ -457,6 +527,8 @@ export default function Chat() {
         setStoredAuth(auth);
         setAuthUser(auth);
         setAuthOpen(false);
+        setHistoryLocked(false);
+        await refreshSessions();
 
         // Clean OAuth params from the URL without a full reload.
         if (hasOAuthReturn) {
@@ -487,7 +559,7 @@ export default function Chat() {
     return () => {
       cancelled = true;
     };
-  }, [routeSessionId, sessionId, runConvertTo3D]);
+  }, [routeSessionId, sessionId, runConvertTo3D, refreshSessions]);
 
   const submitMessage = useCallback(
     async (rawText) => {
@@ -495,6 +567,9 @@ export default function Chat() {
       if (!userText || loading) return;
 
       let activeId = sessionId;
+      const signedIn = Boolean(
+        (authUser || getStoredAuth())?.auth_user_id
+      );
 
       if (!activeId) {
         try {
@@ -502,7 +577,10 @@ export default function Chat() {
           activeId = data.session.id;
           setSessionId(activeId);
           navigate(`/chat/${activeId}`, { replace: true });
-          setSessions((prev) => [data.session, ...prev]);
+          if (signedIn && data.session) {
+            setSessions((prev) => [data.session, ...prev]);
+            setHistoryLocked(false);
+          }
           if (data.quota) setQuota(data.quota);
         } catch (err) {
           setError(err.response?.data?.detail || "Failed to create session.");
@@ -569,7 +647,7 @@ export default function Chat() {
         setLoading(false);
       }
     },
-    [loading, sessionId, navigate, closeSidebar]
+    [loading, sessionId, navigate, closeSidebar, authUser]
   );
 
   const handleSend = useCallback(
@@ -580,11 +658,22 @@ export default function Chat() {
     [input, submitMessage]
   );
 
+  const fillComposer = useCallback((text) => {
+    setInput(text);
+    requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      const end = text.length;
+      textarea.setSelectionRange(end, end);
+    });
+  }, []);
+
   const handleQuickReply = useCallback(
     (label) => {
-      submitMessage(label);
+      fillComposer(label);
     },
-    [submitMessage]
+    [fillComposer]
   );
 
   const handleKeyDown = useCallback(
@@ -614,6 +703,8 @@ export default function Chat() {
     [showWelcome, requirements]
   );
   const quotaUnlimited = Boolean(quota?.unlimited) || quota?.max >= 999;
+  // Always hide history when signed out — do not rely on API alone.
+  const historyHidden = !authUser?.auth_user_id || historyLocked;
 
   return (
     <div
@@ -622,15 +713,17 @@ export default function Chat() {
       }`}
     >
       <SessionSidebar
-        sessions={sessions}
+        sessions={historyHidden ? [] : sessions}
         activeSessionId={sessionId}
         loading={sessionsLoading}
+        historyLocked={historyHidden}
         theme={theme}
         onToggleTheme={toggleTheme}
         onNewChat={handleNewChat}
         onSelectSession={handleSelectSession}
         onRenameSession={handleRenameSession}
         onDeleteSession={handleDeleteSession}
+        onSignIn={handleSignIn}
       />
 
       <div className="studio-main">
@@ -657,10 +750,10 @@ export default function Chat() {
             <p>
               {firstName
                 ? quotaUnlimited
-                  ? `Hi ${firstName} · testing mode (unlimited images)`
+                  ? `Hi ${firstName}`
                   : `Hi ${firstName} · ${quota.remaining} of ${quota.max} free generations left`
                 : quotaUnlimited
-                  ? "Testing mode · unlimited image generations"
+                  ? "Chat freely · image generation unlocked"
                   : `${quota.remaining} of ${quota.max} free generations remaining`}
             </p>
           </div>
@@ -731,7 +824,7 @@ export default function Chat() {
                           key={suggestion}
                           type="button"
                           className="suggestion-chip pressable"
-                          onClick={() => setInput(suggestion)}
+                          onClick={() => fillComposer(suggestion)}
                         >
                           {suggestion}
                         </button>
@@ -837,6 +930,8 @@ export default function Chat() {
             onSignOut={handleSignOut}
             onConvertTo3D={handleConvertTo3D}
             onRegenerate={handleRegenerate}
+            onDownloadImage={handleDownloadImage}
+            onExportModel={modelJob?.model_url ? handleExportModel : null}
           />
         </div>
       </div>
@@ -860,6 +955,7 @@ export default function Chat() {
         regenerateError={regenerateError}
         onConvertTo3D={generationImageUrl ? handleConvertTo3D : null}
         converting3d={converting3d}
+        onDownloadImage={generationImageUrl ? handleDownloadImage : null}
         quota={quota}
       />
 

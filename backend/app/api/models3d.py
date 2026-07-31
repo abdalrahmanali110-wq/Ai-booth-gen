@@ -57,37 +57,29 @@ def enqueue_model3d(
     data: CreateModel3DRequest,
     x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
 ):
-    from app.core.config import ANON_MAX_IMAGE_GENERATIONS, DEFAULT_USER_ID
+    if not data.auth_user_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Sign in with Google to unlock 3D model generation.",
+        )
 
-    auth_user_id = data.auth_user_id
-    testing_mode = ANON_MAX_IMAGE_GENERATIONS <= 0
-    if not auth_user_id:
-        if testing_mode:
-            auth_user_id = DEFAULT_USER_ID
-        else:
-            raise HTTPException(
-                status_code=401,
-                detail="Authentication required for 3D conversion",
-            )
-
-    if data.auth_user_id:
-        try:
-            claim_session(
-                session_id=session_id,
-                auth_user_id=data.auth_user_id,
-                visitor_id=x_visitor_id,
-            )
-        except PermissionError as exc:
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except Exception:
-            pass
+    try:
+        claim_session(
+            session_id=session_id,
+            auth_user_id=data.auth_user_id,
+            visitor_id=x_visitor_id,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception:
+        pass
 
     try:
         if data.process_now:
             job = create_and_process_job(
-                user_id=auth_user_id,
+                user_id=data.auth_user_id,
                 session_id=session_id,
                 source_image_url=data.source_image_url,
                 source_image_id=data.source_image_id,
@@ -95,7 +87,7 @@ def enqueue_model3d(
             )
         else:
             job = create_job(
-                user_id=auth_user_id,
+                user_id=data.auth_user_id,
                 session_id=session_id,
                 source_image_url=data.source_image_url,
                 source_image_id=data.source_image_id,

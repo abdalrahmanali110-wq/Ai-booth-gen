@@ -38,6 +38,8 @@ export default function BoothWorkspace({
   onSignOut,
   onConvertTo3D,
   onRegenerate,
+  onDownloadImage,
+  onExportModel,
 }) {
   const filled = BUILD_STEPS.filter((step) =>
     formatStepValue(step.key, requirements[step.key])
@@ -109,7 +111,7 @@ export default function BoothWorkspace({
           <span>{progress}% brief complete</span>
           <span>
             {quotaUnlimited
-              ? "Testing mode · unlimited images"
+              ? "Images available"
               : "Free images available"}
           </span>
         </div>
@@ -156,6 +158,13 @@ export default function BoothWorkspace({
         <figure className="workspace-photo">
           <img src={imageUrl} alt="Generated booth concept" />
           <figcaption>
+            <button
+              type="button"
+              className="workspace-download-link pressable"
+              onClick={onDownloadImage}
+            >
+              Download image
+            </button>
             <a href={imageUrl} target="_blank" rel="noreferrer">
               Open full image
             </a>
@@ -168,10 +177,17 @@ export default function BoothWorkspace({
           <button
             type="button"
             className="workspace-secondary-btn pressable"
+            onClick={onDownloadImage}
+          >
+            Download
+          </button>
+          <button
+            type="button"
+            className="workspace-secondary-btn pressable"
             onClick={onRegenerate}
             disabled={regenerating}
           >
-            {regenerating ? "Regenerating..." : "Regenerate image"}
+            {regenerating ? "Regenerating..." : "Regenerate"}
           </button>
           <button
             type="button"
@@ -183,7 +199,7 @@ export default function BoothWorkspace({
               ? "Converting to 3D..."
               : modelUrl
                 ? "Rebuild 3D model"
-                : authUser?.auth_user_id || quotaUnlimited
+                : authUser?.auth_user_id
                   ? "Generate 3D model"
                   : "Sign in to generate 3D"}
           </button>
@@ -198,7 +214,24 @@ export default function BoothWorkspace({
 
       {modelUrl && (
         <div className="workspace-model-wrap">
-          <ModelViewer modelUrl={modelUrl} />
+          <div className="workspace-export-bar">
+            <div>
+              <p className="workspace-export-label">3D model ready</p>
+              <p className="workspace-export-hint">
+                Preview below, or export the GLB for Blender / Unity / web.
+              </p>
+            </div>
+            {onExportModel && (
+              <button
+                type="button"
+                className="workspace-primary-btn pressable"
+                onClick={onExportModel}
+              >
+                Export 3D model
+              </button>
+            )}
+          </div>
+          <ModelViewer modelUrl={modelUrl} onExport={onExportModel} />
         </div>
       )}
 

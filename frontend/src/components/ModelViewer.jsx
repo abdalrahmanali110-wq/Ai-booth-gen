@@ -11,7 +11,7 @@ function Model({ url }) {
   );
 }
 
-export default function ModelViewer({ modelUrl, onClose }) {
+export default function ModelViewer({ modelUrl, onClose, onExport }) {
   const [fullscreen, setFullscreen] = useState(false);
 
   if (!modelUrl) return null;
@@ -25,6 +25,11 @@ export default function ModelViewer({ modelUrl, onClose }) {
       <div className="model-viewer-toolbar">
         <span>3D booth preview</span>
         <div className="model-viewer-actions">
+          {onExport && (
+            <button type="button" className="pressable" onClick={onExport}>
+              Export GLB
+            </button>
+          )}
           <button
             type="button"
             className="pressable"

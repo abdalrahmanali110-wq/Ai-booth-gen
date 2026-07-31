@@ -38,6 +38,7 @@ export default function RequirementsPanel({
   regenerateError,
   onConvertTo3D,
   converting3d,
+  onDownloadImage,
   quota,
 }) {
   const hasRequirements = Object.values(requirements || {}).some(
@@ -148,6 +149,18 @@ export default function RequirementsPanel({
                 disabled={converting3d}
               >
                 {converting3d ? "Converting to 3D..." : "Convert to 3D"}
+              </button>
+            )}
+            {onDownloadImage && generationResult?.generated_image?.image_url && (
+              <button
+                type="button"
+                className="regenerate-btn pressable"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDownloadImage();
+                }}
+              >
+                Download image
               </button>
             )}
           </div>

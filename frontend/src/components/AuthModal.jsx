@@ -51,15 +51,15 @@ export default function AuthModal({
     <div className="auth-modal-backdrop" role="dialog" aria-modal="true">
       <div className="auth-modal">
         <header className="auth-modal-header">
-          <h2>{forConvert ? "Sign in to unlock 3D" : "Welcome back"}</h2>
+          <h2>{forConvert ? "Sign in to unlock 3D" : "Save your work"}</h2>
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close">
             ×
           </button>
         </header>
         <p className="auth-modal-copy">
           {forConvert
-            ? "Sign in with Google to convert your booth concept into an interactive 3D model and save your project."
-            : "Sign in with Google anytime to save your booth projects and unlock 3D conversion."}
+            ? "Sign in with Google to generate an interactive 3D model and keep this project in your chat history."
+            : "Sign in with Google to save chat history and unlock 3D model generation."}
         </p>
 
         {error && (

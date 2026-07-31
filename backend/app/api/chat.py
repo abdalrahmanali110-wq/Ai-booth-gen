@@ -52,36 +52,107 @@ def _session_owned(session: dict, visitor_id: str | None) -> bool:
     return str(session_visitor) == str(visitor_id)
 
 
+@router.get("/sessions")
+def list_sessions(
+    limit: int = 50,
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+    x_auth_user_id: str | None = Header(default=None, alias="X-Auth-User-Id"),
+):
+    visitor = _resolve_visitor(x_visitor_id)
+
+    # History is a signed-in feature — anonymous work stays off the sidebar.
+    if not x_auth_user_id:
+        return {
+            "success": True,
+            "sessions": [],
+            "visitor_id": visitor["id"],
+            "quota": get_quota(visitor_id=visitor["id"]),
+            "history_locked": True,
+        }
+
+    sessions = []
+    try:
+        response = (
+            supabase.table("chat_sessions")
+            .select(
+                "id, title, status, created_at, booth_request_id, visitor_id, anon, claimed_user_id"
+            )
+            .eq("claimed_user_id", x_auth_user_id)
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        sessions = response.data or []
+    except Exception:
+        try:
+            response = (
+                supabase.table("chat_sessions")
+                .select("id, title, status, created_at, booth_request_id")
+                .eq("user_id", x_auth_user_id)
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute()
+            )
+            sessions = response.data or []
+        except Exception:
+            sessions = []
+
+    return {
+        "success": True,
+        "sessions": sessions,
+        "visitor_id": visitor["id"],
+        "quota": get_quota(visitor_id=visitor["id"]),
+        "history_locked": False,
+    }
+
+
+@router.get("/quota")
+def chat_quota(
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+):
+    visitor = _resolve_visitor(x_visitor_id)
+    return {
+        "success": True,
+        "visitor_id": visitor["id"],
+        "quota": get_quota(visitor_id=visitor["id"]),
+    }
+
+
 @router.post("/session")
 def create_session(
     data: CreateSessionRequest,
     x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+    x_auth_user_id: str | None = Header(default=None, alias="X-Auth-User-Id"),
 ):
     visitor = _resolve_visitor(x_visitor_id)
     session = None
     last_error = None
+    signed_in = bool(x_auth_user_id)
 
     for attempt in range(3):
         try:
             payload = {
-                "user_id": DEFAULT_USER_ID,
+                "user_id": x_auth_user_id if signed_in else DEFAULT_USER_ID,
                 "title": data.title,
                 "visitor_id": visitor["id"],
-                "anon": True,
+                "anon": not signed_in,
             }
+            if signed_in:
+                payload["claimed_user_id"] = x_auth_user_id
             response = supabase.table("chat_sessions").insert(payload).execute()
             session = response.data[0]
             break
         except Exception as exc:
             last_error = exc
-            # Retry without new columns if migration not applied yet
             if attempt == 1:
                 try:
                     response = (
                         supabase.table("chat_sessions")
                         .insert(
                             {
-                                "user_id": DEFAULT_USER_ID,
+                                "user_id": (
+                                    x_auth_user_id if signed_in else DEFAULT_USER_ID
+                                ),
                                 "title": data.title,
                             }
                         )
@@ -122,53 +193,6 @@ def create_session(
         "success": True,
         "session": session,
         "welcome_message": WELCOME_MESSAGE,
-        "visitor_id": visitor["id"],
-        "quota": get_quota(visitor_id=visitor["id"]),
-    }
-
-
-@router.get("/quota")
-def chat_quota(
-    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
-):
-    visitor = _resolve_visitor(x_visitor_id)
-    return {
-        "success": True,
-        "visitor_id": visitor["id"],
-        "quota": get_quota(visitor_id=visitor["id"]),
-    }
-
-
-@router.get("/sessions")
-def list_sessions(
-    limit: int = 50,
-    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
-):
-    visitor = _resolve_visitor(x_visitor_id)
-    try:
-        response = (
-            supabase.table("chat_sessions")
-            .select("id, title, status, created_at, booth_request_id, visitor_id, anon")
-            .eq("visitor_id", visitor["id"])
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        sessions = response.data or []
-    except Exception:
-        response = (
-            supabase.table("chat_sessions")
-            .select("id, title, status, created_at, booth_request_id")
-            .eq("user_id", DEFAULT_USER_ID)
-            .order("created_at", desc=True)
-            .limit(limit)
-            .execute()
-        )
-        sessions = response.data or []
-
-    return {
-        "success": True,
-        "sessions": sessions,
         "visitor_id": visitor["id"],
         "quota": get_quota(visitor_id=visitor["id"]),
     }
