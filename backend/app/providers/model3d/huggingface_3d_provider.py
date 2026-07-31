@@ -8,7 +8,6 @@ from app.core.config import HUGGINGFACE_API_KEY, MODEL_3D_HF_ENDPOINT
 from app.providers.base import (
     Model3DGenerationProvider,
     Model3DResult,
-    ProviderNotConfigured,
 )
 
 
@@ -109,13 +108,3 @@ class HuggingFace3DProvider(Model3DGenerationProvider):
             pass
 
         return self._fallback.generate_from_image(image_url, prompt=prompt)
-
-
-class TripoProvider(Model3DGenerationProvider):
-    name = "tripo"
-
-    def generate_from_image(self, image_url: str, *, prompt: str | None = None) -> Model3DResult:
-        raise ProviderNotConfigured(
-            "TripoProvider is not configured yet. "
-            "Set MODEL_3D_PROVIDER=huggingface_3d or stub_glb for development."
-        )

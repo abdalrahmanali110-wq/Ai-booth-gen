@@ -18,8 +18,8 @@ from app.providers.llm.gemma_provider import ClaudeProvider, GemmaProvider
 from app.providers.model3d.huggingface_3d_provider import (
     HuggingFace3DProvider,
     StubGLBProvider,
-    TripoProvider,
 )
+from app.providers.model3d.tripo_provider import TripoProvider
 
 
 def get_llm_provider() -> LLMProvider:
