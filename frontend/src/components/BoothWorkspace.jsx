@@ -33,6 +33,8 @@ export default function BoothWorkspace({
   regenerating,
   converting3d,
   quotaUnlimited,
+  quotaRemaining,
+  quotaMax,
   authUser,
   onSignIn,
   onSignOut,
@@ -111,8 +113,8 @@ export default function BoothWorkspace({
           <span>{progress}% brief complete</span>
           <span>
             {quotaUnlimited
-              ? "Images available"
-              : "Free images available"}
+              ? "Unlimited images"
+              : `${quotaRemaining ?? 0} of ${quotaMax ?? 3} free images left`}
           </span>
         </div>
         <div

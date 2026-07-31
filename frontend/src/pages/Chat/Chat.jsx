@@ -76,9 +76,9 @@ export default function Chat() {
   const [isMobile, setIsMobile] = useState(isMobileViewport);
   const [quota, setQuota] = useState({
     used: 0,
-    remaining: 999,
-    max: 999,
-    unlimited: true,
+    remaining: 3,
+    max: 3,
+    unlimited: false,
   });
   const [authUser, setAuthUser] = useState(() => getStoredAuth());
   const [authOpen, setAuthOpen] = useState(false);
@@ -702,7 +702,7 @@ export default function Chat() {
     () => (showWelcome ? [] : getQuickReplies(requirements)),
     [showWelcome, requirements]
   );
-  const quotaUnlimited = Boolean(quota?.unlimited) || quota?.max >= 999;
+  const quotaUnlimited = Boolean(quota?.unlimited);
   // Always hide history when signed out — do not rely on API alone.
   const historyHidden = !authUser?.auth_user_id || historyLocked;
 
@@ -925,6 +925,8 @@ export default function Chat() {
             regenerating={regenerating}
             converting3d={converting3d}
             quotaUnlimited={quotaUnlimited}
+            quotaRemaining={quota.remaining}
+            quotaMax={quota.max}
             authUser={authUser}
             onSignIn={handleSignIn}
             onSignOut={handleSignOut}
