@@ -110,7 +110,7 @@
 
 /* ── Workspace ── */
 
-.workspace-photo {
+.workspace-photo-frame {
   animation: photo-reveal 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 

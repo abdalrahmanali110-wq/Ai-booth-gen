@@ -1492,6 +1492,13 @@
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(320px, 42%) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.studio-split > .booth-workspace {
+  min-height: 0;
+  max-height: 100%;
 }
 
 .studio-chat {
@@ -1554,7 +1561,6 @@
 
 .project-brief {
   margin-top: 0.95rem;
-  flex-shrink: 0;
 }
 
 .project-brief-header {
@@ -1677,15 +1683,17 @@
 }
 
 .booth-workspace {
-  display: flex;
-  flex-direction: column;
+  display: block;
   min-width: 0;
+  min-height: 0;
   height: 100%;
   padding: 1rem 1.15rem 1.1rem;
   background:
     radial-gradient(ellipse at 70% 10%, rgba(196, 168, 130, 0.12), transparent 55%),
     linear-gradient(180deg, #141416 0%, #1a1a1c 45%, #121214 100%);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 [data-theme="light"] .booth-workspace {
@@ -1700,7 +1708,6 @@
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 0.9rem;
-  flex-shrink: 0;
 }
 
 .workspace-kicker {
@@ -1759,7 +1766,6 @@
 
 .workspace-progress-block {
   margin-bottom: 0.95rem;
-  flex-shrink: 0;
 }
 
 .workspace-progress-meta {
@@ -1828,26 +1834,35 @@
 }
 
 .workspace-photo {
-  margin: 0;
+  margin: 0 0 0.75rem;
   width: 100%;
-  flex: 0 0 auto;
-  flex-shrink: 0;
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
-  overflow: hidden;
   background: #0b0c0e;
-  align-self: stretch;
+  overflow: hidden;
 }
 
-.workspace-photo img {
+.workspace-photo-frame {
+  position: relative;
+  width: 100%;
+  /* Keep a tall viewing area so the booth is never crushed */
+  aspect-ratio: 4 / 3;
+  min-height: 280px;
+  max-height: min(72vh, 640px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0b0c0e;
+}
+
+.workspace-photo-frame img {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
   max-width: 100%;
-  max-height: none;
+  max-height: 100%;
   object-fit: contain;
-  object-position: center top;
-  vertical-align: top;
+  object-position: center center;
 }
 
 .workspace-photo figcaption {
@@ -2132,7 +2147,6 @@
   flex-wrap: wrap;
   gap: 0.55rem;
   margin-top: 0.95rem;
-  flex-shrink: 0;
 }
 
 .workspace-primary-btn {

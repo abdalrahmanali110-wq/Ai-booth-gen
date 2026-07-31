@@ -156,7 +156,9 @@ export default function BoothWorkspace({
 
       {imageUrl && (
         <figure className="workspace-photo">
-          <img src={imageUrl} alt="Generated booth concept" />
+          <div className="workspace-photo-frame">
+            <img src={imageUrl} alt="Generated booth concept" />
+          </div>
           <figcaption>
             <button
               type="button"
