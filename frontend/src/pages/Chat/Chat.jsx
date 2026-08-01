@@ -78,7 +78,7 @@ export default function Chat() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(() => !isMobileViewport());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(isMobileViewport);
   const [quota, setQuota] = useState({
     used: 0,
@@ -208,8 +208,9 @@ export default function Chat() {
       timeoutId = setTimeout(() => {
         const mobile = isMobileViewport();
         setIsMobile(mobile);
-        if (!mobile) {
-          setSidebarOpen(true);
+        // Keep history closed by default; only auto-close when switching to mobile.
+        if (mobile) {
+          setSidebarOpen(false);
         }
       }, 150);
     }
@@ -391,35 +392,12 @@ export default function Chat() {
     [sessions, sessionId, navigate]
   );
 
-  const handleRegenerate = useCallback(async () => {
+  const handleRegenerate = useCallback(() => {
     if (!sessionId || regenerating) return;
-
-    setRegenerating(true);
     setRegenerateError("");
     setError("");
-
-    try {
-      const data = await generateBooth(sessionId);
-      setGenerationResult(data.result);
-      if (data.quota) setQuota(data.quota);
-      shouldScrollRef.current = true;
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `assistant-gen-${Date.now()}`,
-          role: "assistant",
-          message:
-            "Your booth concept has been regenerated. See the updated analysis below.",
-        },
-      ]);
-    } catch (err) {
-      const message =
-        err.response?.data?.detail || "Image generation failed.";
-      setRegenerateError(message);
-      setError(message);
-    } finally {
-      setRegenerating(false);
-    }
+    setSummaryDismissed(false);
+    setSummaryOpen(true);
   }, [sessionId, regenerating]);
 
   const runConvertTo3D = useCallback(
@@ -783,8 +761,9 @@ export default function Chat() {
           {
             id: `assistant-gen-${Date.now()}`,
             role: "assistant",
-            message:
-              "Your booth concept is ready. You can regenerate, download, or convert to 3D after signing in.",
+            message: generationResult?.generated_image?.image_url
+              ? "Your booth concept has been regenerated. See the updated design on the right."
+              : "Your booth concept is ready. You can regenerate, download, or convert to 3D after signing in.",
           },
         ]);
       } catch (err) {
@@ -796,7 +775,7 @@ export default function Chat() {
         setRegenerating(false);
       }
     },
-    [sessionId, regenerating]
+    [sessionId, regenerating, generationResult]
   );
 
   const handleKeyDown = useCallback(
@@ -847,9 +826,6 @@ export default function Chat() {
       isBriefReady(requirements) && !generationImageUrl && conversationStarted;
     if (ready && !briefReadyRef.current && !summaryDismissed) {
       setSummaryOpen(true);
-    }
-    if (generationImageUrl) {
-      setSummaryOpen(false);
     }
     briefReadyRef.current = ready;
   }, [
@@ -1102,10 +1078,11 @@ export default function Chat() {
       />
 
       <SummaryConfirmPopup
-        open={summaryOpen && !generationImageUrl}
+        open={summaryOpen}
         requirements={requirements}
         generating={regenerating}
         saving={savingRequirements}
+        hasExistingImage={Boolean(generationImageUrl)}
         onGenerate={handleGenerateFromSummary}
         onDismiss={() => {
           setSummaryOpen(false);

@@ -33,6 +33,7 @@ export default function SummaryConfirmPopup({
   requirements = {},
   generating = false,
   saving = false,
+  hasExistingImage = false,
   onGenerate,
   onDismiss,
 }) {
@@ -104,9 +105,13 @@ export default function SummaryConfirmPopup({
           </button>
         </header>
 
-        <h3 id="summary-confirm-title">Review your booth brief</h3>
+        <h3 id="summary-confirm-title">
+          {hasExistingImage ? "Update your booth brief" : "Review your booth brief"}
+        </h3>
         <p className="summary-confirm-copy">
-          Edit any answer below, then start generating your booth concept.
+          {hasExistingImage
+            ? "Edit any answer below, then regenerate your booth concept."
+            : "Edit any answer below, then start generating your booth concept."}
         </p>
 
         <form className="summary-confirm-form" onSubmit={handleGenerate}>
@@ -143,7 +148,7 @@ export default function SummaryConfirmPopup({
               className="workspace-primary-btn pressable summary-generate-btn"
               disabled={busy}
             >
-              Generate concept
+              {hasExistingImage ? "Regenerate concept" : "Generate concept"}
             </button>
           </div>
         </form>
