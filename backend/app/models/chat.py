@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 DEFAULT_SESSION_TITLE = "New Booth Consultation"
 
@@ -14,3 +14,7 @@ class UpdateSessionRequest(BaseModel):
 class ChatMessageRequest(BaseModel):
     session_id: str
     message: str
+
+
+class UpdateRequirementsRequest(BaseModel):
+    requirements: dict = Field(default_factory=dict)

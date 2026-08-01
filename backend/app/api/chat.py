@@ -5,13 +5,16 @@ from app.core.database import supabase
 from app.models.chat import (
     CreateSessionRequest,
     ChatMessageRequest,
+    UpdateRequirementsRequest,
     UpdateSessionRequest,
 )
 from app.services.agent_service import (
     generate_agent_reply,
     get_requirements,
     get_session_generation_result,
+    is_complete,
     run_generation_pipeline,
+    save_requirements,
 )
 from app.services.visitor_service import (
     assert_can_generate,
@@ -279,6 +282,32 @@ def get_session(session_id: str):
         "session": response.data[0],
         "requirements": get_requirements(session_id),
         "generation_result": get_session_generation_result(session_id),
+    }
+
+
+@router.patch("/session/{session_id}/requirements")
+def update_requirements(
+    session_id: str,
+    data: UpdateRequirementsRequest,
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+):
+    existing = (
+        supabase.table("chat_sessions").select("*").eq("id", session_id).execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not _session_owned(existing.data[0], x_visitor_id):
+        raise HTTPException(status_code=403, detail="Session does not belong to visitor")
+
+    current = get_requirements(session_id) or {}
+    merged = {**current, **(data.requirements or {})}
+    save_requirements(session_id, merged)
+    updated = get_requirements(session_id)
+
+    return {
+        "success": True,
+        "requirements": updated,
+        "requirements_complete": is_complete(updated or {}),
     }
 
 

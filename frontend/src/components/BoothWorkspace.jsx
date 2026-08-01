@@ -42,6 +42,8 @@ export default function BoothWorkspace({
   onRegenerate,
   onDownloadImage,
   onExportModel,
+  onSaveRequirements,
+  savingRequirements,
 }) {
   const filled = BUILD_STEPS.filter((step) =>
     formatStepValue(step.key, requirements[step.key])
@@ -239,9 +241,7 @@ export default function BoothWorkspace({
         </div>
       )}
 
-      {briefReady ? (
-        <ProjectBrief requirements={requirements} />
-      ) : (
+      {!briefReady && (
         <ul className="workspace-steps">
           {BUILD_STEPS.map((step) => {
             const value = formatStepValue(step.key, requirements[step.key]);
@@ -257,6 +257,12 @@ export default function BoothWorkspace({
           })}
         </ul>
       )}
+
+      <ProjectBrief
+        requirements={requirements}
+        onSave={onSaveRequirements}
+        saving={savingRequirements}
+      />
     </section>
   );
 }

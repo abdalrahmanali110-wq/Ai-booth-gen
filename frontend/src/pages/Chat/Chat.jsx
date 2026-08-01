@@ -19,6 +19,7 @@ import {
   getSession,
   listSessions,
   sendMessage,
+  updateRequirements,
   updateSession,
 } from "../../services/chatService";
 import { createModel3D, getModel3DJob } from "../../services/model3dService";
@@ -32,7 +33,11 @@ import {
   setStoredAuth,
 } from "../../services/storage";
 import AuthModal from "../../components/AuthModal";
-import { getQuickReplies } from "../../utils/intake";
+import QuestionPopup from "../../components/QuestionPopup";
+import {
+  STARTER_PROMPTS,
+  getIntakeQuestion,
+} from "../../utils/intake";
 import { useTheme } from "../../hooks/useTheme";
 
 const DEFAULT_TITLE = "New Booth Consultation";
@@ -85,6 +90,9 @@ export default function Chat() {
   const [converting3d, setConverting3d] = useState(false);
   const [modelJob, setModelJob] = useState(null);
   const [authIntent, setAuthIntent] = useState("signin");
+  const [animatedPlaceholder, setAnimatedPlaceholder] = useState("");
+  const [dismissedQuestionField, setDismissedQuestionField] = useState(null);
+  const [savingRequirements, setSavingRequirements] = useState(false);
 
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
@@ -237,6 +245,48 @@ export default function Chat() {
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
   }, [input]);
+
+  const showWelcome = !sessionLoading && messages.length === 0 && !loading;
+
+  useEffect(() => {
+    if (!showWelcome || input.trim()) {
+      setAnimatedPlaceholder("");
+      return undefined;
+    }
+
+    let promptIndex = 0;
+    let charIndex = 0;
+    let deleting = false;
+    let timerId = null;
+
+    const tick = () => {
+      const current = STARTER_PROMPTS[promptIndex % STARTER_PROMPTS.length];
+      if (!deleting) {
+        charIndex += 1;
+        setAnimatedPlaceholder(current.slice(0, charIndex));
+        if (charIndex >= current.length) {
+          deleting = true;
+          timerId = setTimeout(tick, 1700);
+          return;
+        }
+        timerId = setTimeout(tick, 38);
+        return;
+      }
+
+      charIndex -= 1;
+      setAnimatedPlaceholder(current.slice(0, Math.max(charIndex, 0)));
+      if (charIndex <= 0) {
+        deleting = false;
+        promptIndex += 1;
+        timerId = setTimeout(tick, 280);
+        return;
+      }
+      timerId = setTimeout(tick, 22);
+    };
+
+    timerId = setTimeout(tick, 450);
+    return () => clearTimeout(timerId);
+  }, [showWelcome, input]);
 
   const toggleSidebar = useCallback(() => {
     setSidebarOpen((open) => {
@@ -658,22 +708,30 @@ export default function Chat() {
     [input, submitMessage]
   );
 
-  const fillComposer = useCallback((text) => {
-    setInput(text);
-    requestAnimationFrame(() => {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-      textarea.focus();
-      const end = text.length;
-      textarea.setSelectionRange(end, end);
-    });
-  }, []);
-
-  const handleQuickReply = useCallback(
-    (label) => {
-      fillComposer(label);
+  const handleQuestionAnswer = useCallback(
+    async (answer) => {
+      setDismissedQuestionField(null);
+      await submitMessage(answer);
     },
-    [fillComposer]
+    [submitMessage]
+  );
+
+  const handleSaveRequirements = useCallback(
+    async (nextRequirements) => {
+      if (!sessionId) return;
+      setSavingRequirements(true);
+      setError("");
+      try {
+        const data = await updateRequirements(sessionId, nextRequirements);
+        setRequirements(data.requirements || nextRequirements);
+        setRequirementsComplete(Boolean(data.requirements_complete));
+      } catch (err) {
+        setError(err.response?.data?.detail || "Failed to save project summary.");
+      } finally {
+        setSavingRequirements(false);
+      }
+    },
+    [sessionId]
   );
 
   const handleKeyDown = useCallback(
@@ -691,20 +749,36 @@ export default function Chat() {
     [sessions, sessionId]
   );
 
-  const showWelcome = !sessionLoading && messages.length === 0 && !loading;
   const generationImageUrl =
     generationResult?.generated_image?.image_url || null;
   const firstName =
     authUser?.name?.split?.(" ")?.[0] ||
     authUser?.email?.split?.("@")?.[0] ||
     null;
-  const quickReplies = useMemo(
-    () => (showWelcome ? [] : getQuickReplies(requirements)),
-    [showWelcome, requirements]
+  const intakeQuestion = useMemo(
+    () => getIntakeQuestion(requirements),
+    [requirements]
   );
+  const conversationStarted =
+    messages.some((msg) => msg.role === "user") ||
+    Object.values(requirements || {}).some(
+      (value) => value !== null && value !== undefined && value !== ""
+    );
+  const showLiveBuild =
+    conversationStarted || Boolean(generationImageUrl) || Boolean(modelJob);
+  const showQuestionPopup =
+    showLiveBuild &&
+    !loading &&
+    !showWelcome &&
+    Boolean(intakeQuestion) &&
+    dismissedQuestionField !== intakeQuestion?.field;
   const quotaUnlimited = Boolean(quota?.unlimited);
   // Always hide history when signed out — do not rely on API alone.
   const historyHidden = !authUser?.auth_user_id || historyLocked;
+
+  useEffect(() => {
+    setDismissedQuestionField(null);
+  }, [intakeQuestion?.field]);
 
   return (
     <div
@@ -787,7 +861,7 @@ export default function Chat() {
           </div>
         </header>
 
-        <div className="studio-split">
+        <div className={`studio-split${showLiveBuild ? "" : " chat-only"}`}>
           <div className="chat-shell studio-chat">
             <main className="chat-stage" ref={chatStageRef}>
               <div className="chat-thread">
@@ -807,29 +881,10 @@ export default function Chat() {
                         : "Design your exhibition booth"}
                     </h2>
                     <p>
-                      Tell me about your event — I&apos;ll collect the brief on the
-                      left while your booth takes shape on the right.
+                      Start typing below — example prompts appear in the chat
+                      box. Once you send a message, your live build opens beside
+                      you.
                     </p>
-                    <div className="welcome-suggestions">
-                      {[
-                        "Design a 6x6 fashion booth",
-                        "Design a corner booth for a tech brand",
-                        "Design a big open booth with two floors",
-                        "Design a booth for a car brand",
-                        "Design a small booth for a food stand",
-                        "Design a fancy jewelry booth",
-                        "Design a booth for a government brand",
-                      ].map((suggestion) => (
-                        <button
-                          key={suggestion}
-                          type="button"
-                          className="suggestion-chip pressable"
-                          onClick={() => fillComposer(suggestion)}
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 )}
 
@@ -864,23 +919,21 @@ export default function Chat() {
             )}
 
             <footer className="chat-composer">
-              {quickReplies.length > 0 && (
-                <div className="quick-replies" aria-label="Suggested answers">
-                  {quickReplies.map((item) => (
-                    <button
-                      key={`${item.field}-${item.label}`}
-                      type="button"
-                      className="quick-reply-chip pressable"
-                      disabled={loading}
-                      onClick={() => handleQuickReply(item.label)}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              )}
               <form className="composer-form" onSubmit={handleSend}>
                 <div className="composer-box">
+                  {showWelcome && !input && (
+                    <button
+                      type="button"
+                      className="composer-animated-placeholder"
+                      tabIndex={-1}
+                      onClick={() => {
+                        if (animatedPlaceholder) setInput(animatedPlaceholder);
+                      }}
+                    >
+                      <span>{animatedPlaceholder}</span>
+                      <span className="composer-caret" />
+                    </button>
+                  )}
                   <textarea
                     ref={textareaRef}
                     rows={1}
@@ -888,9 +941,11 @@ export default function Chat() {
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder={
-                      firstName
-                        ? `Message your booth consultant, ${firstName}...`
-                        : "Message Booth AI..."
+                      showWelcome
+                        ? ""
+                        : firstName
+                          ? `Message your booth consultant, ${firstName}...`
+                          : "Message Booth AI..."
                     }
                     disabled={loading}
                   />
@@ -915,26 +970,30 @@ export default function Chat() {
             </footer>
           </div>
 
-          <BoothWorkspace
-            requirements={requirements}
-            imageUrl={generationImageUrl}
-            modelUrl={modelJob?.model_url || null}
-            modelStatus={modelJob?.status || null}
-            modelError={modelJob?.status === "FAILED" ? modelJob?.error : null}
-            loading={loading}
-            regenerating={regenerating}
-            converting3d={converting3d}
-            quotaUnlimited={quotaUnlimited}
-            quotaRemaining={quota.remaining}
-            quotaMax={quota.max}
-            authUser={authUser}
-            onSignIn={handleSignIn}
-            onSignOut={handleSignOut}
-            onConvertTo3D={handleConvertTo3D}
-            onRegenerate={handleRegenerate}
-            onDownloadImage={handleDownloadImage}
-            onExportModel={modelJob?.model_url ? handleExportModel : null}
-          />
+          {showLiveBuild && (
+            <BoothWorkspace
+              requirements={requirements}
+              imageUrl={generationImageUrl}
+              modelUrl={modelJob?.model_url || null}
+              modelStatus={modelJob?.status || null}
+              modelError={modelJob?.status === "FAILED" ? modelJob?.error : null}
+              loading={loading}
+              regenerating={regenerating}
+              converting3d={converting3d}
+              quotaUnlimited={quotaUnlimited}
+              quotaRemaining={quota.remaining}
+              quotaMax={quota.max}
+              authUser={authUser}
+              onSignIn={handleSignIn}
+              onSignOut={handleSignOut}
+              onConvertTo3D={handleConvertTo3D}
+              onRegenerate={handleRegenerate}
+              onDownloadImage={handleDownloadImage}
+              onExportModel={modelJob?.model_url ? handleExportModel : null}
+              onSaveRequirements={handleSaveRequirements}
+              savingRequirements={savingRequirements}
+            />
+          )}
         </div>
       </div>
 
@@ -959,6 +1018,16 @@ export default function Chat() {
         converting3d={converting3d}
         onDownloadImage={generationImageUrl ? handleDownloadImage : null}
         quota={quota}
+      />
+
+      <QuestionPopup
+        open={showQuestionPopup}
+        question={intakeQuestion}
+        loading={loading}
+        onAnswer={handleQuestionAnswer}
+        onDismiss={() =>
+          setDismissedQuestionField(intakeQuestion?.field || null)
+        }
       />
 
       <AuthModal

@@ -1,119 +1,143 @@
-function formatBudget(value) {
-  if (value === null || value === undefined || value === "") return "—";
-  const num = typeof value === "number" ? value : Number(value);
-  if (Number.isFinite(num)) return `${num.toLocaleString()} AED`;
+import { useEffect, useMemo, useState } from "react";
+import {
+  FIELD_LABELS,
+  FIELD_ORDER,
+  FIELD_QUESTIONS,
+  formatRequirementValue,
+} from "../utils/intake";
+
+function toEditableValue(key, value) {
+  if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) return value.join(", ");
   return String(value);
 }
 
-function budgetTier(value) {
-  const num = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(num)) return "Custom";
-  if (num < 40000) return "Essential Tier";
-  if (num < 90000) return "Standard Tier";
-  if (num < 180000) return "Premium Tier";
-  return "Bespoke Tier";
-}
-
-function layoutFromSides(openSides) {
-  const text = String(openSides || "").toLowerCase();
-  if (text.includes("all") || text.includes("4")) return "Island";
-  if (text.includes("3")) return "Peninsula";
-  if (text.includes("2") || text.includes("corner")) return "Corner";
-  if (text.includes("1")) return "Inline";
-  return openSides || "—";
-}
-
-function pillsFromRequirements(requirements) {
-  const pills = [];
-  if (requirements.theme) pills.push(String(requirements.theme));
-  if (requirements.brand_colors) pills.push(String(requirements.brand_colors));
-  const features = requirements.special_requirements;
-  if (Array.isArray(features)) {
-    features.slice(0, 4).forEach((item) => {
-      if (item) pills.push(String(item));
-    });
+function fromEditableValue(key, raw) {
+  const text = (raw || "").trim();
+  if (!text) return null;
+  if (key === "special_requirements") {
+    if (/^none$/i.test(text)) return [];
+    return text.split(",").map((part) => part.trim()).filter(Boolean);
   }
-  return pills;
+  if (key === "budget") {
+    const digits = text.replace(/[^\d.]/g, "");
+    const num = Number(digits);
+    if (Number.isFinite(num) && digits) return num;
+  }
+  return text;
 }
 
-export default function ProjectBrief({ requirements = {}, onEdit }) {
-  const size = requirements.booth_size || "—";
-  const brand = requirements.brand_name || "Your brand";
-  const industry = requirements.industry || "—";
-  const eventName = requirements.event_name || "—";
-  const location = requirements.location || "—";
-  const pills = pillsFromRequirements(requirements);
+export default function ProjectBrief({
+  requirements = {},
+  onSave,
+  saving = false,
+}) {
+  const filledEntries = useMemo(
+    () =>
+      FIELD_ORDER.map((field) => ({
+        field,
+        question: FIELD_QUESTIONS[field] || FIELD_LABELS[field],
+        label: FIELD_LABELS[field] || field,
+        value: formatRequirementValue(field, requirements[field]),
+        raw: requirements[field],
+      })).filter((row) => row.value),
+    [requirements]
+  );
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({});
+
+  useEffect(() => {
+    if (!editing) return;
+    const next = {};
+    FIELD_ORDER.forEach((field) => {
+      next[field] = toEditableValue(field, requirements[field]);
+    });
+    setDraft(next);
+  }, [editing, requirements]);
+
+  async function handleSave() {
+    if (!onSave) {
+      setEditing(false);
+      return;
+    }
+    const payload = {};
+    FIELD_ORDER.forEach((field) => {
+      payload[field] = fromEditableValue(field, draft[field]);
+    });
+    await onSave(payload);
+    setEditing(false);
+  }
+
+  if (!filledEntries.length && !editing) {
+    return null;
+  }
 
   return (
-    <section className="project-brief" aria-label="Project brief">
+    <section className="project-brief" aria-label="Project summary">
       <header className="project-brief-header">
         <div>
-          <h3>Project Brief</h3>
-          <p>Review the booth parameters before we generate the design.</p>
+          <h3>Project summary</h3>
+          <p>Questions and answers collected so far — edit anytime.</p>
         </div>
-        {onEdit && (
-          <button type="button" className="project-brief-edit pressable" onClick={onEdit}>
-            Edit requirements
+        {onSave && (
+          <button
+            type="button"
+            className="project-brief-edit pressable"
+            onClick={() => (editing ? handleSave() : setEditing(true))}
+            disabled={saving}
+          >
+            {editing ? (saving ? "Saving..." : "Save changes") : "Customize answers"}
           </button>
         )}
       </header>
 
-      <div className="project-brief-card">
-        <div className="project-brief-row">
-          <div className="project-brief-cell">
-            <span className="project-brief-label">Brand</span>
-            <strong>{brand}</strong>
-            <span className="project-brief-sub">{industry}</span>
-          </div>
-          <div className="project-brief-divider" aria-hidden="true" />
-          <div className="project-brief-cell">
-            <span className="project-brief-label">Event</span>
-            <strong>{eventName}</strong>
-            <span className="project-brief-sub">{location}</span>
-          </div>
-        </div>
-
-        <div className="project-brief-row">
-          <div className="project-brief-cell">
-            <span className="project-brief-label">Dimensions</span>
-            <strong>{size}m</strong>
-            <span className="project-brief-sub">
-              Open sides: {requirements.open_sides || "—"}
-            </span>
-          </div>
-          <div className="project-brief-divider" aria-hidden="true" />
-          <div className="project-brief-cell">
-            <span className="project-brief-label">Layout type</span>
-            <strong>{layoutFromSides(requirements.open_sides)}</strong>
-            <span className="project-brief-sub">Exhibition hall</span>
-          </div>
-        </div>
-
-        <div className="project-brief-row">
-          <div className="project-brief-cell">
-            <span className="project-brief-label">Est. budget</span>
-            <strong className="project-brief-budget">
-              {formatBudget(requirements.budget)}
-            </strong>
-            <span className="project-brief-sub">{budgetTier(requirements.budget)}</span>
+      {editing ? (
+        <div className="project-brief-qa editing">
+          {FIELD_ORDER.map((field) => (
+            <label key={field} className="project-brief-qa-row">
+              <span className="project-brief-qa-question">
+                {FIELD_QUESTIONS[field] || FIELD_LABELS[field]}
+              </span>
+              <input
+                type="text"
+                value={draft[field] || ""}
+                onChange={(e) =>
+                  setDraft((prev) => ({ ...prev, [field]: e.target.value }))
+                }
+                placeholder="Not set yet"
+              />
+            </label>
+          ))}
+          <div className="project-brief-edit-actions">
+            <button
+              type="button"
+              className="workspace-secondary-btn pressable"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="workspace-primary-btn pressable"
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? "Saving..." : "Save answers"}
+            </button>
           </div>
         </div>
-
-        <div className="project-brief-aesthetic">
-          <span className="project-brief-label">Aesthetic direction</span>
-          <div className="project-brief-pills">
-            {pills.length ? (
-              pills.map((pill) => (
-                <span key={pill} className="project-brief-pill">
-                  {pill}
-                </span>
-              ))
-            ) : (
-              <span className="project-brief-sub">Add style and features in chat</span>
-            )}
-          </div>
-        </div>
-      </div>
+      ) : (
+        <ul className="project-brief-qa">
+          {filledEntries.map((row) => (
+            <li key={row.field} className="project-brief-qa-row">
+              <span className="project-brief-qa-question">{row.question}</span>
+              <strong className="project-brief-qa-answer">{row.value}</strong>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

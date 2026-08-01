@@ -55,6 +55,13 @@ export async function updateSession(sessionId, title) {
   return data;
 }
 
+export async function updateRequirements(sessionId, requirements) {
+  const { data } = await api.patch(`/chat/session/${sessionId}/requirements`, {
+    requirements,
+  });
+  return data;
+}
+
 export async function deleteSession(sessionId) {
   const { data } = await api.delete(`/chat/session/${sessionId}`);
   return data;
