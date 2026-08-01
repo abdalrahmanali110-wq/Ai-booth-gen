@@ -757,6 +757,10 @@ export default function Chat() {
     async (nextRequirements) => {
       if (!sessionId || regenerating) return;
       setError("");
+      // Close the summary popup immediately so it can fade out.
+      setSummaryOpen(false);
+      setSummaryDismissed(true);
+
       setSavingRequirements(true);
       try {
         const saved = await updateRequirements(sessionId, nextRequirements);
@@ -765,6 +769,8 @@ export default function Chat() {
       } catch (err) {
         setError(err.response?.data?.detail || "Failed to save summary.");
         setSavingRequirements(false);
+        setSummaryOpen(true);
+        setSummaryDismissed(false);
         return;
       }
       setSavingRequirements(false);
@@ -774,8 +780,6 @@ export default function Chat() {
         const data = await generateBooth(sessionId);
         setGenerationResult(data.result);
         if (data.quota) setQuota(data.quota);
-        setSummaryOpen(false);
-        setSummaryDismissed(true);
         shouldScrollRef.current = true;
         setMessages((prev) => [
           ...prev,

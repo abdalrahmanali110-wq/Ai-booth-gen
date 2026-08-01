@@ -26,6 +26,8 @@ function fromEditableValue(key, raw) {
   return text;
 }
 
+const FADE_MS = 280;
+
 export default function SummaryConfirmPopup({
   open,
   requirements = {},
@@ -35,6 +37,23 @@ export default function SummaryConfirmPopup({
   onDismiss,
 }) {
   const [draft, setDraft] = useState({});
+  const [mounted, setMounted] = useState(open);
+  const [exiting, setExiting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      setExiting(false);
+      return undefined;
+    }
+    if (!mounted) return undefined;
+    setExiting(true);
+    const timer = setTimeout(() => {
+      setMounted(false);
+      setExiting(false);
+    }, FADE_MS);
+    return () => clearTimeout(timer);
+  }, [open, mounted]);
 
   useEffect(() => {
     if (!open) return;
@@ -45,23 +64,29 @@ export default function SummaryConfirmPopup({
     setDraft(next);
   }, [open, requirements]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   const busy = generating || saving;
 
-  async function handleGenerate(event) {
+  function handleGenerate(event) {
     event.preventDefault();
+    if (busy) return;
     const payload = {};
     FIELD_ORDER.forEach((field) => {
       payload[field] = fromEditableValue(field, draft[field]);
     });
-    await onGenerate(payload);
+    onGenerate(payload);
   }
 
   return (
-    <div className="question-popup-backdrop" role="presentation">
+    <div
+      className={`question-popup-backdrop${exiting ? " is-exiting" : ""}`}
+      role="presentation"
+    >
       <div
-        className="question-popup summary-confirm-popup"
+        className={`question-popup summary-confirm-popup${
+          exiting ? " is-exiting" : ""
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="summary-confirm-title"
@@ -118,11 +143,7 @@ export default function SummaryConfirmPopup({
               className="workspace-primary-btn pressable summary-generate-btn"
               disabled={busy}
             >
-              {generating
-                ? "Generating concept..."
-                : saving
-                  ? "Saving..."
-                  : "Generate concept"}
+              Generate concept
             </button>
           </div>
         </form>

@@ -1677,6 +1677,10 @@
   animation: fade-in 0.25s ease both;
 }
 
+.question-popup-backdrop.is-exiting {
+  animation: popup-fade-out 0.28s ease forwards;
+}
+
 .question-popup {
   width: min(520px, 100%);
   border: 1px solid var(--border-subtle);
@@ -1685,6 +1689,30 @@
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
   padding: 1.1rem 1.15rem 1.2rem;
   animation: fade-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.question-popup.is-exiting {
+  animation: popup-scale-out 0.28s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes popup-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes popup-scale-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
 }
 
 .question-popup-header {
