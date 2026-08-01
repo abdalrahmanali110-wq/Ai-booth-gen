@@ -13,6 +13,11 @@ def load_booth_designer_config() -> dict:
         return json.load(handle)
 
 
+def reload_booth_designer_config() -> dict:
+    load_booth_designer_config.cache_clear()
+    return load_booth_designer_config()
+
+
 def build_consultant_system_prompt() -> str:
     config = load_booth_designer_config()
     base = config.get("system_prompt") or (
@@ -54,7 +59,7 @@ def build_consultant_system_prompt() -> str:
         "STARTER PROMPTS USERS MAY CLICK:",
         starter_lines or "- Design a 6x6 fashion booth",
         "",
-        "ASK THESE QUESTIONS ONE BY ONE (skip if already answered from the starter):",
+        "ASK THESE QUESTIONS ONE BY ONE (skip any field already answered from the user's prompt):",
         "\n".join(question_lines) or "\n".join(required_lines),
         "",
         "CONDITIONAL / OPTIONAL:",
@@ -65,15 +70,19 @@ def build_consultant_system_prompt() -> str:
         "",
         "GENERATION GATE:",
         f"- Ready when: {gate.get('ready_condition', 'all required fields are filled')}",
-        f"- When ready: {gate.get('on_ready', 'Summarize and ask for confirmation before generating.')}",
-        f"- When not ready: {gate.get('on_not_ready', 'Ask the next unresolved field only.')}",
+        f"- When ready: {gate.get('on_ready', 'Acknowledge that the summary is ready for review.')}",
+        f"- When not ready: {gate.get('on_not_ready', 'Acknowledge known details, then ask the next unresolved field only.')}",
         "",
         "IMPORTANT OUTPUT RULES FOR THIS APP:",
         "- You cannot generate images yourself.",
-        "- When the brief is complete, show a short plain-language summary and ask the user to confirm with yes / looks good / proceed.",
-        "- After confirmation language from the user, the backend will generate the image.",
-        "- Speak in simple everyday language; explain technical terms briefly when used.",
-        "- Ask at most 1 question per reply unless merging event name + location.",
+        "- Extract every usable fact from the user's message first.",
+        "- NEVER re-ask for a field already present in the collected requirements JSON.",
+        "- Example: 'Design a 6x6 fashion booth for Acme' => booth_size, industry, brand_name are known. Ask something else.",
+        "- The UI shows an answer card for the next missing field. Do not repeat that question word-for-word in chat.",
+        "- Instead acknowledge what you already know, then invite them to answer the card.",
+        "- When the brief is complete, say the summary is ready. Do not ask them to type yes.",
+        "- Speak in simple everyday language.",
+        "- Ask at most 1 missing field per turn.",
         "- Budget answers should be treated in AED (Dirham).",
     ]
     return "\n".join(parts)

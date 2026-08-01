@@ -16,7 +16,7 @@
     "Design a booth for a government brand"
   ],
 
-  "system_prompt": "You are the AI Booth Designer assistant. Collect a clear booth brief through short, friendly chat, then wait for the user to confirm before any image is generated. Talk in plain everyday language. Ask at most 1-2 questions per reply. Never invent venue rules or claim you already generated an image. When the brief is complete, summarize in plain language and ask them to reply yes / looks good before generation.",
+  "system_prompt": "You are the AI Booth Designer assistant. Collect a clear booth brief through short, friendly chat. Extract every detail the user already provided before asking anything. Never re-ask for fields you already know. Talk in plain everyday language. Ask at most 1 question per reply. Never invent venue rules or claim you already generated an image. When the brief is complete, acknowledge that the summary is ready — do not ask them to type yes.",
 
   "question_order": [
     {
@@ -137,15 +137,16 @@
 
   "hard_constraints": [
     "Ask questions one at a time (or at most two related ones).",
-    "Never generate or claim to generate images until the brief is complete and the user confirms.",
+    "Never generate or claim to generate images until the brief is complete.",
     "Budget is discussed in AED (Dirham).",
-    "If the first message is a starter prompt like 'Design a 6x6 fashion booth', extract what you can and ask only for what is still missing.",
+    "If the first message is a starter prompt like 'Design a 6x6 fashion booth for Acme', extract booth size, industry, brand, theme, and open sides when present, then ask ONLY for what is still missing.",
+    "Never re-ask a field that is already filled in the collected requirements.",
     "Keep language simple and personal."
   ],
 
   "generation_gate": {
     "ready_condition": "brand_name, industry, event_name, location, booth_size, open_sides, theme, brand_colors, special_requirements, and budget are filled",
-    "on_ready": "Summarize the booth briefly in plain language and ask the user to confirm with yes / looks good / proceed before generation.",
-    "on_not_ready": "Ask the next unresolved field only."
+    "on_ready": "Acknowledge that the project summary is ready for review. Do not ask the user to type yes.",
+    "on_not_ready": "Acknowledge known details, then ask only the next unresolved field."
   }
 }

@@ -7,7 +7,9 @@ from app.models.chat import DEFAULT_SESSION_TITLE
 from app.services.consultation_report_service import generate_consultation_report
 from app.services.gemma_service import (
     chat_reply,
+    contextual_extract_from_turn,
     extract_requirements_from_conversation,
+    summarize_known_requirements,
 )
 from app.services.consultant_config import (
     build_consultant_system_prompt,
@@ -360,12 +362,26 @@ def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
         history,
         empty_requirements(),
     )
+    # Ensure the latest user turn is always extracted, even if history lag/dedupe
+    # skipped it somehow.
+    requirements = contextual_extract_from_turn(
+        history,
+        user_message,
+        requirements,
+    )
 
     complete = is_complete(requirements)
     missing = get_missing_fields(requirements)
     next_question = get_next_question(requirements)
     awaiting_confirmation = complete and not user_confirmed_generation(user_message)
     should_generate = complete and user_confirmed_generation(user_message)
+    known_summary = summarize_known_requirements(requirements)
+
+    filled = {
+        key: value
+        for key, value in requirements.items()
+        if value not in (None, "", [])
+    }
 
     reasoning_details = None
     reply = None
@@ -375,8 +391,10 @@ def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
         provider = get_llm_provider()
         system_prompt = build_consultant_system_prompt()
         context = (
-            f"Current collected requirements JSON:\n{json.dumps(requirements, indent=2)}\n\n"
-            f"Missing fields: {', '.join(missing) if missing else 'none'}\n"
+            f"Already collected requirements (NEVER ask these again):\n"
+            f"{json.dumps(filled, indent=2)}\n\n"
+            f"Still missing fields: {', '.join(missing) if missing else 'none'}\n"
+            f"Known summary: {known_summary or 'nothing yet'}\n"
         )
         if awaiting_confirmation:
             context += (
@@ -385,17 +403,30 @@ def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
                 "looks good — the UI shows a summary popup with a Generate button."
             )
         elif next_question:
-            context += f"Ask only about the next missing detail. Hint: {next_question}"
+            context += (
+                "The UI already shows an answer card for the next missing field. "
+                "Your chat message must ONLY acknowledge what you already extracted "
+                "from the user's latest message, then invite them to answer the card. "
+                "Do NOT repeat the card question verbatim. "
+                "Do NOT ask about any already-collected field. "
+                f"Next missing field hint (for you only, do not copy): {next_question}"
+            )
+
+        # Avoid duplicating the latest user message if it is already in history.
+        history_payload = [
+            {"role": m["role"], "content": m["content"]} for m in history
+        ]
+        if not history_payload or history_payload[-1].get("content") != user_message:
+            history_payload.append({"role": "user", "content": user_message})
 
         llm_messages = [
-            *[{"role": m["role"], "content": m["content"]} for m in history],
-            {"role": "user", "content": user_message},
+            *history_payload,
             {"role": "system", "content": context},
         ]
         result = provider.chat(
             llm_messages,
             system_prompt=system_prompt,
-            temperature=0.5,
+            temperature=0.4,
         )
         reply = result.content
         reasoning_details = result.reasoning_details
@@ -409,7 +440,13 @@ def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
                 "you want, then tap Generate concept."
             )
         elif not complete and next_question:
-            reply = next_question
+            if known_summary:
+                reply = (
+                    f"Got it — {known_summary}. "
+                    "I'd like a few more details about your booth."
+                )
+            else:
+                reply = "I'd like to know a few details about your booth."
         else:
             fallback = chat_reply(
                 history,
@@ -417,8 +454,37 @@ def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
                 requirements,
                 next_question=next_question,
             )
-            reply = (fallback or {}).get("reply") or next_question or (
-                "Tell me more about the booth you want to build."
+            reply = (fallback or {}).get("reply") or (
+                f"Got it — {known_summary}."
+                if known_summary
+                else "Tell me more about the booth you want to build."
+            )
+
+    # Guardrail: if the model re-asks something already known, replace with adaptive ack.
+    if reply and filled and not awaiting_confirmation:
+        lower_reply = reply.lower()
+        reasked = False
+        ask_markers = {
+            "brand_name": ["brand name", "what's your brand"],
+            "industry": ["what industry", "which industry"],
+            "booth_size": ["booth size", "what size"],
+            "theme": ["design to feel", "what direction", "theme"],
+            "event_name": ["event name", "what's the event"],
+            "location": ["where is the event", "located"],
+            "brand_colors": ["brand colors", "brand colours"],
+            "budget": ["budget range", "what's your budget"],
+            "open_sides": ["open sides", "how many open"],
+        }
+        for field, markers in ask_markers.items():
+            if requirements.get(field) and any(marker in lower_reply for marker in markers):
+                reasked = True
+                break
+        if reasked:
+            reply = (
+                f"Got it — {known_summary}. "
+                "I'd like a few more details about your booth."
+                if known_summary
+                else "I'd like a few more details about your booth."
             )
 
     save_requirements(session_id, requirements)
@@ -438,8 +504,10 @@ def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
     if jumped_to_generation and not should_generate:
         if not complete:
             reply = (
-                f"I still need a few details before image generation. "
-                f"{get_next_question(requirements)}"
+                f"Got it — {known_summary}. "
+                "I'd like a few more details about your booth."
+                if known_summary
+                else "I'd like a few more details about your booth."
             )
         else:
             reply = (

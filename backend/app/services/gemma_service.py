@@ -56,19 +56,22 @@ THEME_ALIASES = {
 
 CHAT_SYSTEM_PROMPT = """You are an AI Exhibition Booth Consultant for a client-facing production app.
 
-Collect booth requirements through natural conversation, one question at a time.
+Collect booth requirements through natural conversation.
 
 Fields to collect:
 - brand_name, industry, slogan (optional), event_name, location, event_date (optional),
   booth_size, open_sides, theme (design direction), brand_colors,
   special_requirements (interior features), budget (AED)
 
-Rules:
-- Ask only ONE question per reply, for the next missing field shown in the context.
-- Accept information in any order.
+Adaptive rules (critical):
+- Extract every usable detail from the user's message before asking anything.
+- NEVER re-ask for a field that is already filled in the collected requirements JSON.
+- If the user says "Design a 6x6 fashion booth for Acme", treat booth_size=6x6, industry=Fashion, brand_name=Acme as known.
+- Ask only for still-missing fields.
+- Ask only ONE missing field per reply.
 - Be professional, concise, and friendly.
 - You CANNOT generate images. Never say you are generating or creating images.
-- When all required fields are collected, summarize and ask for confirmation.
+- When all required fields are collected, acknowledge that the summary is ready.
 - Do not invent requirements the user did not provide.
 """
 
@@ -146,6 +149,75 @@ def _parse_industry(text: str) -> str | None:
     return None
 
 
+def _is_design_prompt(text: str) -> bool:
+    return bool(
+        re.search(
+            r"^(design|make|create|build|i want|i need)\b",
+            text.strip(),
+            re.I,
+        )
+    )
+
+
+def _parse_brand_name(text: str) -> str | None:
+    """Pull an explicit brand/business name from free-text prompts."""
+    cleaned = " ".join(text.strip().split())
+    if not cleaned:
+        return None
+
+    patterns = [
+        r"(?i)\b(?:brand(?:\s+name)?|company|business)\s*(?:is|:)\s*([A-Za-z0-9][\w&.'-]*(?:\s+[A-Za-z0-9][\w&.'-]*){0,3})",
+        r"(?i)\bcalled\s+([A-Za-z0-9][\w&.'-]*(?:\s+[A-Za-z0-9][\w&.'-]*){0,2})(?:\s*[,.]|\s+(?:in|at|with|for|booth|stand)|$)",
+        r"(?i)\bnamed\s+([A-Za-z0-9][\w&.'-]*(?:\s+[A-Za-z0-9][\w&.'-]*){0,2})(?:\s*[,.]|\s+(?:in|at|with|for|booth|stand)|$)",
+        r"(?i)\bfor\s+([A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*){0,3})(?:\s*[,.]|\s+(?:in|at|with|booth|stand)|$)",
+    ]
+    # Reject captures that are clearly not brand names.
+    blocklist = {
+        "a",
+        "an",
+        "the",
+        "my",
+        "our",
+        "design",
+        "make",
+        "create",
+        "build",
+        "corner",
+        "small",
+        "big",
+        "open",
+        "fancy",
+        "exhibition",
+        "trade",
+        "show",
+        "tech brand",
+        "car brand",
+        "food stand",
+        "fashion booth",
+        "jewelry booth",
+    }
+    for pattern in patterns:
+        match = re.search(pattern, cleaned)
+        if not match:
+            continue
+        candidate = match.group(1).strip(" .,!?:;\"'")
+        # Trim trailing location/event words if captured.
+        candidate = re.split(
+            r"(?i)\s+(?:in|at|with|for|booth|stand|pavilion)\b",
+            candidate,
+            maxsplit=1,
+        )[0].strip()
+        lowered = candidate.lower()
+        if not candidate or lowered in blocklist:
+            continue
+        if re.search(r"\d+\s*[x×]\s*\d+", candidate, re.I):
+            continue
+        if len(candidate) < 2:
+            continue
+        return candidate
+    return None
+
+
 def _parse_theme(text: str) -> str | None:
     lower = text.lower()
     for key, label in THEME_ALIASES.items():
@@ -160,6 +232,13 @@ def _parse_theme(text: str) -> str | None:
     ):
         if option.lower() in lower:
             return option
+    # Soft theme hints from starter-style language
+    if re.search(r"\bfancy\b|\bluxury\b|\bpremium\b", lower):
+        return "Premium & Luxury"
+    if re.search(r"\bmodern\b|\btech brand\b", lower):
+        return "Modern & Tech"
+    if re.search(r"\bminimal\b|\bclean\b", lower):
+        return "Minimal & Clean"
     return None
 
 
@@ -260,7 +339,7 @@ def _looks_like_event(text: str) -> bool:
 
 
 def _apply_starter_prompt_hints(text: str, updated: dict) -> dict:
-    """Pull obvious facts from chatbox starter prompts."""
+    """Pull obvious facts from chatbox starter prompts and free-text briefs."""
     lower = text.lower()
     if not updated.get("booth_size"):
         size = _parse_booth_size(text)
@@ -280,6 +359,34 @@ def _apply_starter_prompt_hints(text: str, updated: dict) -> dict:
         theme = _parse_theme(text)
         if theme:
             updated["theme"] = theme
+    if not updated.get("brand_name"):
+        brand = _parse_brand_name(text)
+        if brand:
+            updated["brand_name"] = brand
+    if not updated.get("location"):
+        for city in ("dubai", "abu dhabi", "sharjah", "riyadh", "doha", "jeddah"):
+            if re.search(rf"\b{re.escape(city)}\b", lower):
+                updated["location"] = city.title() if city != "abu dhabi" else "Abu Dhabi"
+                break
+    if not updated.get("event_name"):
+        known_events = {
+            "gitex": "GITEX",
+            "adipec": "ADIPEC",
+            "arab health": "Arab Health",
+            "world of coffee": "World of Coffee",
+        }
+        for key, label in known_events.items():
+            if re.search(rf"\b{re.escape(key)}\b", lower):
+                updated["event_name"] = label
+                break
+        if not updated.get("event_name") and _looks_like_event(text):
+            event_match = re.search(
+                r"\b([A-Za-z][\w&' -]{1,40}(?:expo|exhibition|fair|conference|summit|forum|show))\b",
+                text,
+                re.I,
+            )
+            if event_match:
+                updated["event_name"] = event_match.group(1).strip()
     return updated
 
 
@@ -338,12 +445,37 @@ def contextual_extract_from_turn(
 
     updated = _apply_starter_prompt_hints(text, updated)
 
+    # Starter / design prompts should only contribute extracted hints,
+    # never dump the whole sentence into slogan/brand/etc.
+    if _is_design_prompt(text):
+        return _sanitize_requirements(updated)
+
     question = _last_assistant_message(messages)
     missing = _missing_fields(updated)
     lower = text.lower()
     field = _infer_target_field(text, question, missing)
 
     if not field:
+        return _sanitize_requirements(updated)
+
+    # Never dump a long free-form brief sentence into a single field.
+    if len(text) > 48 and field in {
+        "brand_name",
+        "slogan",
+        "event_name",
+        "location",
+        "theme",
+        "brand_colors",
+    }:
+        parsed = {
+            "brand_name": _parse_brand_name(text),
+            "theme": _parse_theme(text),
+            "industry": _parse_industry(text),
+            "booth_size": _parse_booth_size(text),
+            "open_sides": _parse_open_sides(text),
+        }
+        if field in parsed and parsed[field]:
+            updated[field] = parsed[field]
         return _sanitize_requirements(updated)
 
     if field == "booth_size":
@@ -655,3 +787,23 @@ def extract_requirements_from_conversation(
             )
 
     return updated
+
+
+def summarize_known_requirements(requirements: dict) -> str:
+    """Short human summary of already-known booth facts."""
+    bits = []
+    if requirements.get("brand_name"):
+        bits.append(str(requirements["brand_name"]))
+    if requirements.get("industry"):
+        bits.append(str(requirements["industry"]))
+    if requirements.get("booth_size"):
+        bits.append(f"{requirements['booth_size']} booth")
+    if requirements.get("theme"):
+        bits.append(str(requirements["theme"]))
+    if requirements.get("event_name"):
+        bits.append(f"for {requirements['event_name']}")
+    if requirements.get("location"):
+        bits.append(f"in {requirements['location']}")
+    if requirements.get("open_sides"):
+        bits.append(str(requirements["open_sides"]))
+    return ", ".join(bits)

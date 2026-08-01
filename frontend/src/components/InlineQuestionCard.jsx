@@ -27,9 +27,6 @@ export default function InlineQuestionCard({
         AI
       </div>
       <div className="message-content">
-        <p className="inline-question-intro">
-          I&apos;d like to know a few more details about your booth.
-        </p>
         <div className="inline-question-card" role="group" aria-label="Booth detail question">
           <p className="inline-question-ask">{question.ask}</p>
 
