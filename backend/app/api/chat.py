@@ -360,7 +360,7 @@ def send_message(
     generation_result = None
     quota = get_quota(visitor_id=visitor["id"])
 
-    if agent_result["requirements_complete"]:
+    if agent_result.get("should_generate"):
         try:
             assert_can_generate(visitor_id=visitor["id"])
             generation_result = run_generation_pipeline(data.session_id)

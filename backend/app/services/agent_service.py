@@ -380,8 +380,9 @@ def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
         )
         if awaiting_confirmation:
             context += (
-                "All required fields appear collected. Summarize the booth briefly in plain "
-                "language and ask the user to confirm before generation (yes / looks good / proceed)."
+                "All required fields appear collected. Briefly acknowledge that the "
+                "project summary is ready for review. Do NOT ask them to type yes or "
+                "looks good — the UI shows a summary popup with a Generate button."
             )
         elif next_question:
             context += f"Ask only about the next missing detail. Hint: {next_question}"
@@ -404,8 +405,8 @@ def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
     if not reply:
         if awaiting_confirmation:
             reply = (
-                "I have enough to draft your booth concept. "
-                "Reply with \"yes\" or \"looks good\" and I'll generate the image."
+                "Your booth brief is ready. Review the summary popup, edit anything "
+                "you want, then tap Generate concept."
             )
         elif not complete and next_question:
             reply = next_question
@@ -442,17 +443,18 @@ def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
             )
         else:
             reply = (
-                "Here's what I have so far. If this looks right, reply with "
-                "\"yes\" or \"looks good\" and I'll generate your booth image."
+                "Your booth brief is ready. Review the summary popup and tap "
+                "Generate concept when you're happy with it."
             )
 
     return {
         "reply": reply,
         "reasoning_details": reasoning_details,
         "requirements": requirements,
-        "requirements_complete": should_generate,
+        "requirements_complete": complete,
         "awaiting_confirmation": awaiting_confirmation,
         "missing_fields": missing,
+        "should_generate": should_generate,
     }
 
 

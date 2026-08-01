@@ -34,9 +34,11 @@ import {
 } from "../../services/storage";
 import AuthModal from "../../components/AuthModal";
 import QuestionPopup from "../../components/QuestionPopup";
+import SummaryConfirmPopup from "../../components/SummaryConfirmPopup";
 import {
   STARTER_PROMPTS,
   getIntakeQuestion,
+  isBriefReady,
 } from "../../utils/intake";
 import { useTheme } from "../../hooks/useTheme";
 
@@ -93,6 +95,9 @@ export default function Chat() {
   const [animatedPlaceholder, setAnimatedPlaceholder] = useState("");
   const [dismissedQuestionField, setDismissedQuestionField] = useState(null);
   const [savingRequirements, setSavingRequirements] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [summaryDismissed, setSummaryDismissed] = useState(false);
+  const briefReadyRef = useRef(false);
 
   const bottomRef = useRef(null);
   const textareaRef = useRef(null);
@@ -167,12 +172,17 @@ export default function Chat() {
 
       setMessages(mapMessages(messagesData.messages));
       setRequirements(sessionData.requirements || {});
-      setRequirementsComplete(
-        Object.values(sessionData.requirements || {}).filter(Boolean).length >= 6
-      );
+      const reqs = sessionData.requirements || {};
+      setRequirementsComplete(isBriefReady(reqs));
       setGenerationResult(sessionData.generation_result || null);
       setModelJob(null);
       setRegenerateError("");
+      setSummaryDismissed(false);
+      const hasImage = Boolean(
+        sessionData.generation_result?.generated_image?.image_url
+      );
+      setSummaryOpen(isBriefReady(reqs) && !hasImage);
+      briefReadyRef.current = isBriefReady(reqs) && !hasImage;
       shouldScrollRef.current = true;
     } catch (err) {
       if (loadingSessionRef.current !== id) return;
@@ -316,6 +326,9 @@ export default function Chat() {
     setError("");
     setLoading(true);
     closeSidebar();
+    setSummaryOpen(false);
+    setSummaryDismissed(false);
+    briefReadyRef.current = false;
 
     try {
       const data = await createSession();
@@ -665,8 +678,14 @@ export default function Chat() {
         setRequirementsComplete(Boolean(data.requirements_complete));
         if (data.quota) setQuota(data.quota);
 
+        if (data.awaiting_confirmation) {
+          setSummaryDismissed(false);
+          setSummaryOpen(true);
+        }
+
         if (data.generation_result) {
           setGenerationResult(data.generation_result);
+          setSummaryOpen(false);
         }
 
         const eventName = data.requirements?.event_name;
@@ -734,6 +753,51 @@ export default function Chat() {
     [sessionId]
   );
 
+  const handleGenerateFromSummary = useCallback(
+    async (nextRequirements) => {
+      if (!sessionId || regenerating) return;
+      setError("");
+      setSavingRequirements(true);
+      try {
+        const saved = await updateRequirements(sessionId, nextRequirements);
+        setRequirements(saved.requirements || nextRequirements);
+        setRequirementsComplete(Boolean(saved.requirements_complete));
+      } catch (err) {
+        setError(err.response?.data?.detail || "Failed to save summary.");
+        setSavingRequirements(false);
+        return;
+      }
+      setSavingRequirements(false);
+
+      setRegenerating(true);
+      try {
+        const data = await generateBooth(sessionId);
+        setGenerationResult(data.result);
+        if (data.quota) setQuota(data.quota);
+        setSummaryOpen(false);
+        setSummaryDismissed(true);
+        shouldScrollRef.current = true;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `assistant-gen-${Date.now()}`,
+            role: "assistant",
+            message:
+              "Your booth concept is ready. You can regenerate, download, or convert to 3D after signing in.",
+          },
+        ]);
+      } catch (err) {
+        const message =
+          err.response?.data?.detail || "Image generation failed.";
+        setRegenerateError(message);
+        setError(message);
+      } finally {
+        setRegenerating(false);
+      }
+    },
+    [sessionId, regenerating]
+  );
+
   const handleKeyDown = useCallback(
     (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
@@ -770,6 +834,7 @@ export default function Chat() {
     showLiveBuild &&
     !loading &&
     !showWelcome &&
+    !summaryOpen &&
     Boolean(intakeQuestion) &&
     dismissedQuestionField !== intakeQuestion?.field;
   const quotaUnlimited = Boolean(quota?.unlimited);
@@ -779,6 +844,23 @@ export default function Chat() {
   useEffect(() => {
     setDismissedQuestionField(null);
   }, [intakeQuestion?.field]);
+
+  useEffect(() => {
+    const ready =
+      isBriefReady(requirements) && !generationImageUrl && conversationStarted;
+    if (ready && !briefReadyRef.current && !summaryDismissed) {
+      setSummaryOpen(true);
+    }
+    if (generationImageUrl) {
+      setSummaryOpen(false);
+    }
+    briefReadyRef.current = ready;
+  }, [
+    requirements,
+    generationImageUrl,
+    conversationStarted,
+    summaryDismissed,
+  ]);
 
   return (
     <div
@@ -1028,6 +1110,18 @@ export default function Chat() {
         onDismiss={() =>
           setDismissedQuestionField(intakeQuestion?.field || null)
         }
+      />
+
+      <SummaryConfirmPopup
+        open={summaryOpen && !generationImageUrl}
+        requirements={requirements}
+        generating={regenerating}
+        saving={savingRequirements}
+        onGenerate={handleGenerateFromSummary}
+        onDismiss={() => {
+          setSummaryOpen(false);
+          setSummaryDismissed(true);
+        }}
       />
 
       <AuthModal
