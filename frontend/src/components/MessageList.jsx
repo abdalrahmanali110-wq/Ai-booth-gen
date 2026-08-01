@@ -1,4 +1,5 @@
 import { memo } from "react";
+import InlineQuestionCard from "./InlineQuestionCard";
 
 const Message = memo(function Message({ role, message }) {
   return (
@@ -18,7 +19,12 @@ export default memo(function MessageList({
   loading,
   requirementsComplete,
   bottomRef,
+  intakeQuestion = null,
+  onAnswerQuestion,
 }) {
+  const showInlineQuestion =
+    Boolean(intakeQuestion) && !loading && typeof onAnswerQuestion === "function";
+
   return (
     <>
       {messages.map((msg) => (
@@ -43,6 +49,14 @@ export default memo(function MessageList({
             </p>
           </div>
         </div>
+      )}
+
+      {showInlineQuestion && (
+        <InlineQuestionCard
+          question={intakeQuestion}
+          loading={loading}
+          onAnswer={onAnswerQuestion}
+        />
       )}
 
       <div ref={bottomRef} />

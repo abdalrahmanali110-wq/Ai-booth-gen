@@ -33,7 +33,6 @@ import {
   setStoredAuth,
 } from "../../services/storage";
 import AuthModal from "../../components/AuthModal";
-import QuestionPopup from "../../components/QuestionPopup";
 import SummaryConfirmPopup from "../../components/SummaryConfirmPopup";
 import {
   STARTER_PROMPTS,
@@ -93,7 +92,6 @@ export default function Chat() {
   const [modelJob, setModelJob] = useState(null);
   const [authIntent, setAuthIntent] = useState("signin");
   const [animatedPlaceholder, setAnimatedPlaceholder] = useState("");
-  const [dismissedQuestionField, setDismissedQuestionField] = useState(null);
   const [savingRequirements, setSavingRequirements] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [summaryDismissed, setSummaryDismissed] = useState(false);
@@ -729,7 +727,6 @@ export default function Chat() {
 
   const handleQuestionAnswer = useCallback(
     async (answer) => {
-      setDismissedQuestionField(null);
       await submitMessage(answer);
     },
     [submitMessage]
@@ -834,20 +831,16 @@ export default function Chat() {
     );
   const showLiveBuild =
     conversationStarted || Boolean(generationImageUrl) || Boolean(modelJob);
-  const showQuestionPopup =
+  const showInlineQuestion =
     showLiveBuild &&
     !loading &&
     !showWelcome &&
     !summaryOpen &&
-    Boolean(intakeQuestion) &&
-    dismissedQuestionField !== intakeQuestion?.field;
+    !generationImageUrl &&
+    Boolean(intakeQuestion);
   const quotaUnlimited = Boolean(quota?.unlimited);
   // Always hide history when signed out — do not rely on API alone.
   const historyHidden = !authUser?.auth_user_id || historyLocked;
-
-  useEffect(() => {
-    setDismissedQuestionField(null);
-  }, [intakeQuestion?.field]);
 
   useEffect(() => {
     const ready =
@@ -979,6 +972,8 @@ export default function Chat() {
                   loading={loading}
                   requirementsComplete={requirementsComplete}
                   bottomRef={bottomRef}
+                  intakeQuestion={showInlineQuestion ? intakeQuestion : null}
+                  onAnswerQuestion={handleQuestionAnswer}
                 />
               </div>
             </main>
@@ -1104,16 +1099,6 @@ export default function Chat() {
         converting3d={converting3d}
         onDownloadImage={generationImageUrl ? handleDownloadImage : null}
         quota={quota}
-      />
-
-      <QuestionPopup
-        open={showQuestionPopup}
-        question={intakeQuestion}
-        loading={loading}
-        onAnswer={handleQuestionAnswer}
-        onDismiss={() =>
-          setDismissedQuestionField(intakeQuestion?.field || null)
-        }
       />
 
       <SummaryConfirmPopup
