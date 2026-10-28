@@ -30,9 +30,6 @@ export async function getSupabaseClient() {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
-        // Implicit flow puts access_token/refresh_token in the URL hash and
-        // leaves them in tab session history after hash clear. Use PKCE.
-        flowType: "pkce",
       },
     });
   })();
