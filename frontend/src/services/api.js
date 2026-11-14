@@ -17,6 +17,9 @@ api.interceptors.request.use((config) => {
   if (auth?.auth_user_id) {
     config.headers["X-Auth-User-Id"] = auth.auth_user_id;
   }
+  if (auth?.access_token) {
+    config.headers.Authorization = `Bearer ${auth.access_token}`;
+  }
   return config;
 });
 

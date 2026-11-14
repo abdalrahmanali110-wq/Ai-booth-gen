@@ -1,32 +1,17 @@
 from __future__ import annotations
 
-import httpx
 from fastapi import APIRouter, Header, HTTPException
 
-from app.core.config import SUPABASE_ANON_KEY, SUPABASE_KEY, SUPABASE_URL
 from app.models.auth import LoginRequest, OAuthCompleteRequest, SignupRequest
 from app.services.auth_service import (
     auth_public_config,
     claim_session,
     create_lead,
     upsert_app_user,
+    verify_access_token,
 )
 
 router = APIRouter()
-
-
-def _auth_headers(*, use_service: bool = False) -> dict[str, str]:
-    key = SUPABASE_KEY if use_service and SUPABASE_KEY else SUPABASE_ANON_KEY
-    if not SUPABASE_URL or not key:
-        raise HTTPException(
-            status_code=503,
-            detail="Supabase Auth is not configured (SUPABASE_URL / anon key).",
-        )
-    return {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-    }
 
 
 @router.get("/config")
@@ -48,21 +33,11 @@ def oauth_complete(
         raise HTTPException(status_code=400, detail="Missing access token")
 
     try:
-        response = httpx.get(
-            f"{SUPABASE_URL}/auth/v1/user",
-            headers={
-                "apikey": SUPABASE_ANON_KEY or SUPABASE_KEY,
-                "Authorization": f"Bearer {data.access_token}",
-            },
-            timeout=30.0,
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Auth user lookup failed: {exc}") from exc
-
-    body = response.json() if response.content else {}
-    if response.status_code >= 400:
-        message = body.get("msg") or body.get("message") or "Invalid or expired session"
-        raise HTTPException(status_code=401, detail=message)
+        body = verify_access_token(data.access_token)
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     auth_user_id = body.get("id")
     email = body.get("email")

@@ -16,6 +16,7 @@ from app.services.agent_service import (
     run_generation_pipeline,
     save_requirements,
 )
+from app.services.auth_service import session_belongs_to_visitor
 from app.services.visitor_service import (
     assert_can_generate,
     get_or_create_visitor,
@@ -47,12 +48,7 @@ def _resolve_visitor(x_visitor_id: str | None) -> dict:
 
 
 def _session_owned(session: dict, visitor_id: str | None) -> bool:
-    if not visitor_id:
-        return True
-    session_visitor = session.get("visitor_id")
-    if not session_visitor:
-        return True
-    return str(session_visitor) == str(visitor_id)
+    return session_belongs_to_visitor(session, visitor_id)
 
 
 @router.get("/sessions")

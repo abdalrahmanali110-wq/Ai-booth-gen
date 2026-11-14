@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Header, HTTPException
 
 from app.models.auth import ClaimSessionRequest, CreateModel3DRequest
-from app.services.auth_service import claim_session, create_lead, upsert_app_user
+from app.services.auth_service import (
+    claim_session,
+    create_lead,
+    require_authenticated_user,
+    upsert_app_user,
+)
 from app.services.model3d_service import (
     create_and_process_job,
     create_job,
@@ -12,16 +17,34 @@ from app.services.model3d_service import (
 router = APIRouter()
 
 
+def _auth_user_from_header(authorization: str | None) -> dict:
+    try:
+        return require_authenticated_user(authorization)
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @router.post("/projects/{session_id}/claim")
 def claim_project(
     session_id: str,
     data: ClaimSessionRequest,
+    authorization: str | None = Header(default=None),
     x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
 ):
+    auth_user = _auth_user_from_header(authorization)
+    auth_user_id = auth_user["id"]
+    if data.auth_user_id and str(data.auth_user_id) != str(auth_user_id):
+        raise HTTPException(
+            status_code=403,
+            detail="auth_user_id does not match the authenticated session",
+        )
+
     try:
         if data.email:
             upsert_app_user(
-                auth_user_id=data.auth_user_id,
+                auth_user_id=auth_user_id,
                 email=data.email,
                 name=data.name,
                 phone=data.phone,
@@ -33,12 +56,12 @@ def claim_project(
                 phone=data.phone,
                 company=data.company,
                 session_id=session_id,
-                auth_user_id=data.auth_user_id,
+                auth_user_id=auth_user_id,
             )
 
         session = claim_session(
             session_id=session_id,
-            auth_user_id=data.auth_user_id,
+            auth_user_id=auth_user_id,
             visitor_id=x_visitor_id,
         )
     except PermissionError as exc:
@@ -55,31 +78,32 @@ def claim_project(
 def enqueue_model3d(
     session_id: str,
     data: CreateModel3DRequest,
+    authorization: str | None = Header(default=None),
     x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
 ):
-    if not data.auth_user_id:
+    auth_user = _auth_user_from_header(authorization)
+    auth_user_id = auth_user["id"]
+    if data.auth_user_id and str(data.auth_user_id) != str(auth_user_id):
         raise HTTPException(
-            status_code=401,
-            detail="Sign in with Google to unlock 3D model generation.",
+            status_code=403,
+            detail="auth_user_id does not match the authenticated session",
         )
 
     try:
         claim_session(
             session_id=session_id,
-            auth_user_id=data.auth_user_id,
+            auth_user_id=auth_user_id,
             visitor_id=x_visitor_id,
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except Exception:
-        pass
 
     try:
         if data.process_now:
             job = create_and_process_job(
-                user_id=data.auth_user_id,
+                user_id=auth_user_id,
                 session_id=session_id,
                 source_image_url=data.source_image_url,
                 source_image_id=data.source_image_id,
@@ -87,7 +111,7 @@ def enqueue_model3d(
             )
         else:
             job = create_job(
-                user_id=data.auth_user_id,
+                user_id=auth_user_id,
                 session_id=session_id,
                 source_image_url=data.source_image_url,
                 source_image_id=data.source_image_id,
@@ -103,17 +127,33 @@ def enqueue_model3d(
 
 
 @router.get("/models3d/{job_id}")
-def get_model3d_job(job_id: str):
+def get_model3d_job(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    auth_user = _auth_user_from_header(authorization)
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="3D job not found")
+    if job.get("user_id") and str(job["user_id"]) != str(auth_user["id"]):
+        raise HTTPException(status_code=403, detail="3D job does not belong to user")
     return {"success": True, "job": job}
 
 
 @router.post("/models3d/{job_id}/process")
-def process_model3d_job(job_id: str):
+def process_model3d_job(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    auth_user = _auth_user_from_header(authorization)
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="3D job not found")
+    if job.get("user_id") and str(job["user_id"]) != str(auth_user["id"]):
+        raise HTTPException(status_code=403, detail="3D job does not belong to user")
+
     try:
-        job = process_job(job_id)
+        job = process_job(job_id, job=job)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
