@@ -66,17 +66,15 @@ def get_design_session(session_id: str) -> dict[str, Any] | None:
 
 
 def list_design_sessions(limit: int = 50) -> list[dict[str, Any]]:
-    response = (
-        supabase.table("booth_designs")
-        .select(
-            "id, title, status, image_url, regenerate_count, created_at, updated_at"
-        )
-        .eq("user_id", DEFAULT_USER_ID)
-        .order("created_at", desc=True)
-        .limit(limit)
-        .execute()
-    )
-    return response.data or []
+    """Unscoped listing is intentionally disabled.
+
+    Every design session was historically inserted with the shared
+    DEFAULT_USER_ID, so filtering on that id returned other visitors'
+    booths (and enabled follow-on fetches of contact PII). Callers must
+    open a session by id they already know.
+    """
+    _ = limit  # retained for API compatibility
+    return []
 
 
 def save_answers(session_id: str, answers: dict[str, Any]) -> dict[str, Any]:
