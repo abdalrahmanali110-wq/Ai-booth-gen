@@ -76,6 +76,27 @@ def session_belongs_to_visitor(
     return str(session_visitor) == str(visitor_id)
 
 
+def session_readable_by(
+    session: dict[str, Any],
+    *,
+    visitor_id: str | None = None,
+    auth_user_id: str | None = None,
+) -> bool:
+    """Allow read if the visitor owns the row or a verified user claimed it."""
+    if auth_user_id:
+        claimed = session.get("claimed_user_id")
+        if claimed and str(claimed) == str(auth_user_id):
+            return True
+        user_id = session.get("user_id")
+        if (
+            user_id
+            and str(user_id) == str(auth_user_id)
+            and str(user_id) != str(DEFAULT_USER_ID)
+        ):
+            return True
+    return session_belongs_to_visitor(session, visitor_id)
+
+
 def upsert_app_user(
     *,
     auth_user_id: str,

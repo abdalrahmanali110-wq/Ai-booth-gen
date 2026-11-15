@@ -45,6 +45,42 @@ class SessionOwnershipTests(unittest.TestCase):
         self.assertFalse(session_belongs_to_visitor({"visitor_id": None}, "vis-1"))
 
 
+class SessionReadableTests(unittest.TestCase):
+    def test_visitor_owner_can_read(self):
+        from app.services.auth_service import session_readable_by
+
+        session = {"visitor_id": "vis-1", "claimed_user_id": None}
+        self.assertTrue(session_readable_by(session, visitor_id="vis-1"))
+        self.assertFalse(session_readable_by(session, visitor_id="vis-2"))
+        self.assertFalse(session_readable_by(session, visitor_id=None))
+
+    def test_verified_claimant_can_read_without_visitor(self):
+        from app.services.auth_service import session_readable_by
+
+        session = {"visitor_id": "vis-1", "claimed_user_id": "user-1"}
+        self.assertTrue(
+            session_readable_by(session, visitor_id=None, auth_user_id="user-1")
+        )
+        self.assertFalse(
+            session_readable_by(session, visitor_id=None, auth_user_id="user-2")
+        )
+
+    def test_default_user_id_is_not_a_claim(self):
+        from app.core.config import DEFAULT_USER_ID
+        from app.services.auth_service import session_readable_by
+
+        session = {
+            "visitor_id": "vis-1",
+            "user_id": DEFAULT_USER_ID,
+            "claimed_user_id": None,
+        }
+        self.assertFalse(
+            session_readable_by(
+                session, visitor_id=None, auth_user_id=DEFAULT_USER_ID
+            )
+        )
+
+
 class BearerTokenHelperTests(unittest.TestCase):
     def test_extract_bearer_token(self):
         from app.services.auth_service import extract_bearer_token

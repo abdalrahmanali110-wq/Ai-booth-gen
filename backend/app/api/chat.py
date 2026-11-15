@@ -16,7 +16,11 @@ from app.services.agent_service import (
     run_generation_pipeline,
     save_requirements,
 )
-from app.services.auth_service import session_belongs_to_visitor
+from app.services.auth_service import (
+    require_authenticated_user,
+    session_belongs_to_visitor,
+    session_readable_by,
+)
 from app.services.visitor_service import (
     assert_can_generate,
     get_or_create_visitor,
@@ -51,16 +55,41 @@ def _session_owned(session: dict, visitor_id: str | None) -> bool:
     return session_belongs_to_visitor(session, visitor_id)
 
 
+def _optional_verified_user_id(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    try:
+        return str(require_authenticated_user(authorization)["id"])
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+def _require_session_readable(
+    session: dict,
+    *,
+    visitor_id: str | None,
+    authorization: str | None,
+) -> None:
+    auth_user_id = _optional_verified_user_id(authorization)
+    if not session_readable_by(
+        session, visitor_id=visitor_id, auth_user_id=auth_user_id
+    ):
+        raise HTTPException(status_code=403, detail="Session does not belong to caller")
+
+
 @router.get("/sessions")
 def list_sessions(
     limit: int = 50,
     x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
-    x_auth_user_id: str | None = Header(default=None, alias="X-Auth-User-Id"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
 ):
     visitor = _resolve_visitor(x_visitor_id)
 
-    # History is a signed-in feature — anonymous work stays off the sidebar.
-    if not x_auth_user_id:
+    # History is a signed-in feature — require a verified Supabase Bearer token.
+    # Never trust client-supplied X-Auth-User-Id for listing.
+    if not authorization:
         return {
             "success": True,
             "sessions": [],
@@ -69,6 +98,14 @@ def list_sessions(
             "history_locked": True,
         }
 
+    try:
+        auth_user = require_authenticated_user(authorization)
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    auth_user_id = str(auth_user["id"])
     sessions = []
     try:
         response = (
@@ -76,7 +113,7 @@ def list_sessions(
             .select(
                 "id, title, status, created_at, booth_request_id, visitor_id, anon, claimed_user_id"
             )
-            .eq("claimed_user_id", x_auth_user_id)
+            .eq("claimed_user_id", auth_user_id)
             .order("created_at", desc=True)
             .limit(limit)
             .execute()
@@ -87,7 +124,7 @@ def list_sessions(
             response = (
                 supabase.table("chat_sessions")
                 .select("id, title, status, created_at, booth_request_id")
-                .eq("user_id", x_auth_user_id)
+                .eq("user_id", auth_user_id)
                 .order("created_at", desc=True)
                 .limit(limit)
                 .execute()
@@ -121,23 +158,25 @@ def chat_quota(
 def create_session(
     data: CreateSessionRequest,
     x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
-    x_auth_user_id: str | None = Header(default=None, alias="X-Auth-User-Id"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
 ):
     visitor = _resolve_visitor(x_visitor_id)
     session = None
     last_error = None
-    signed_in = bool(x_auth_user_id)
+    # Only attribute sessions to a user after verifying the Bearer token.
+    auth_user_id = _optional_verified_user_id(authorization)
+    signed_in = bool(auth_user_id)
 
     for attempt in range(3):
         try:
             payload = {
-                "user_id": x_auth_user_id if signed_in else DEFAULT_USER_ID,
+                "user_id": auth_user_id if signed_in else DEFAULT_USER_ID,
                 "title": data.title,
                 "visitor_id": visitor["id"],
                 "anon": not signed_in,
             }
             if signed_in:
-                payload["claimed_user_id"] = x_auth_user_id
+                payload["claimed_user_id"] = auth_user_id
             response = supabase.table("chat_sessions").insert(payload).execute()
             session = response.data[0]
             break
@@ -150,7 +189,7 @@ def create_session(
                         .insert(
                             {
                                 "user_id": (
-                                    x_auth_user_id if signed_in else DEFAULT_USER_ID
+                                    auth_user_id if signed_in else DEFAULT_USER_ID
                                 ),
                                 "title": data.title,
                             }
@@ -262,7 +301,11 @@ def delete_session(
 
 
 @router.get("/session/{session_id}")
-def get_session(session_id: str):
+def get_session(
+    session_id: str,
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
     response = (
         supabase.table("chat_sessions")
         .select("*")
@@ -273,9 +316,14 @@ def get_session(session_id: str):
     if not response.data:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    session = response.data[0]
+    _require_session_readable(
+        session, visitor_id=x_visitor_id, authorization=authorization
+    )
+
     return {
         "success": True,
-        "session": response.data[0],
+        "session": session,
         "requirements": get_requirements(session_id),
         "generation_result": get_session_generation_result(session_id),
     }
@@ -308,7 +356,21 @@ def update_requirements(
 
 
 @router.get("/session/{session_id}/messages")
-def get_messages(session_id: str):
+def get_messages(
+    session_id: str,
+    x_visitor_id: str | None = Header(default=None, alias="X-Visitor-Id"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    existing = (
+        supabase.table("chat_sessions").select("*").eq("id", session_id).execute()
+    )
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    _require_session_readable(
+        existing.data[0], visitor_id=x_visitor_id, authorization=authorization
+    )
+
     response = (
         supabase.table("chat_messages")
         .select("*")
