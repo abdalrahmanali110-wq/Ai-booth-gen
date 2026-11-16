@@ -11,10 +11,7 @@ from app.services.gemma_service import (
     extract_requirements_from_conversation,
     summarize_known_requirements,
 )
-from app.services.consultant_config import (
-    build_consultant_system_prompt,
-    user_confirmed_generation,
-)
+from app.services.consultant_config import build_consultant_system_prompt
 from app.providers.registry import get_llm_provider
 from app.providers.base import ProviderNotConfigured
 from app.services.image_service import generate_booth_image
@@ -373,8 +370,13 @@ def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
     complete = is_complete(requirements)
     missing = get_missing_fields(requirements)
     next_question = get_next_question(requirements)
-    awaiting_confirmation = complete and not user_confirmed_generation(user_message)
-    should_generate = complete and user_confirmed_generation(user_message)
+    # Image generation is gated behind POST /chat/session/{id}/generate (summary
+    # popup "Generate concept"). Never auto-start from chat text: the old
+    # substring phrase matcher treated "yes" inside "yesterday" / "confirm" /
+    # "I don't want to generate yet" as approval, skipped the review popup, and
+    # burned anonymous image quota.
+    awaiting_confirmation = complete
+    should_generate = False
     known_summary = summarize_known_requirements(requirements)
 
     filled = {

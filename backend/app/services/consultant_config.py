@@ -88,25 +88,7 @@ def build_consultant_system_prompt() -> str:
     return "\n".join(parts)
 
 
-CONFIRMATION_PHRASES = (
-    "yes",
-    "yep",
-    "yeah",
-    "looks good",
-    "proceed",
-    "go ahead",
-    "generate",
-    "create it",
-    "start generating",
-    "confirm",
-    "approved",
-    "ok generate",
-    "okay generate",
-)
-
-
-def user_confirmed_generation(message: str) -> bool:
-    text = (message or "").strip().lower()
-    if not text:
-        return False
-    return any(phrase in text for phrase in CONFIRMATION_PHRASES)
+# Chat-text confirmation phrases were removed. Generation is confirmed only via
+# POST /chat/session/{id}/generate after the summary popup. Substring matching
+# ("yes" in "yesterday", "generate" in "don't generate yet") caused false
+# auto-generation and quota burn.
