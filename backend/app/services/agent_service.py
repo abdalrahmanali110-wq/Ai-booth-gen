@@ -358,9 +358,12 @@ def _dedupe_conversation(messages: list[dict]) -> list[dict]:
 def generate_agent_reply(session_id: str, user_message: str) -> dict[str, Any]:
     history = _dedupe_conversation(get_conversation_history(session_id))
 
+    # Seed from persisted requirements so summary-popup / PATCH edits are not
+    # wiped when chat re-extracts from history (history only has pre-edit text).
+    saved_requirements = get_requirements(session_id) or empty_requirements()
     requirements = extract_requirements_from_conversation(
         history,
-        empty_requirements(),
+        saved_requirements,
     )
     # Ensure the latest user turn is always extracted, even if history lag/dedupe
     # skipped it somehow.
