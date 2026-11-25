@@ -528,13 +528,21 @@ export default function Chat() {
 
   // Complete Google OAuth after redirect back from Google / Supabase.
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(
+      window.location.hash.replace(/^#/, "")
+    );
     const hasOAuthReturn =
-      window.location.search.includes("code=") ||
-      window.location.hash.includes("access_token");
+      searchParams.has("code") || hashParams.has("access_token");
     const pendingSessionId = getPendingAuthSession();
     if (!hasOAuthReturn && !pendingSessionId) return undefined;
 
     let cancelled = false;
+
+    function scrubAuthUrl(claimSessionId) {
+      const clean = claimSessionId ? `/chat/${claimSessionId}` : "/chat";
+      window.history.replaceState({}, "", clean);
+    }
 
     async function finishGoogleAuth() {
       try {
@@ -569,12 +577,10 @@ export default function Chat() {
         setHistoryLocked(false);
         await refreshSessions();
 
-        // Clean OAuth params from the URL without a full reload.
+        // Always replaceState (never hash="") so auth secrets are not left in
+        // the tab session-history stack for Back-button recovery.
         if (hasOAuthReturn) {
-          const clean = claimSessionId
-            ? `/chat/${claimSessionId}`
-            : "/chat";
-          window.history.replaceState({}, "", clean);
+          scrubAuthUrl(claimSessionId);
         }
 
         const shouldConvert = consumePendingConvert();
@@ -584,6 +590,11 @@ export default function Chat() {
           }, 500);
         }
       } catch (err) {
+        if (hasOAuthReturn) {
+          scrubAuthUrl(
+            pendingSessionId || sessionId || routeSessionId || undefined
+          );
+        }
         if (!cancelled) {
           setError(
             err.response?.data?.detail ||
