@@ -109,10 +109,17 @@ def process_job(job_id: str, job: dict[str, Any] | None = None) -> dict[str, Any
                 result.model_bytes,
                 filename=f"booth-{str(job_id)[:8]}.glb",
             )
-        except Exception:
-            # Cloudinary/raw upload can fail on serverless — use hosted demo GLB.
-            model_url = _demo_model_url()
-            result_provider = f"{result.provider}+demo_fallback"
+        except Exception as upload_exc:
+            # Testing mode only: keep the viewer working with a local demo GLB.
+            # In production, never mark COMPLETED with a substitute model — that
+            # makes users export a generic booth instead of their Tripo result.
+            if ANON_MAX_IMAGE_GENERATIONS <= 0:
+                model_url = _demo_model_url()
+                result_provider = f"{result.provider}+demo_fallback"
+            else:
+                raise RuntimeError(
+                    f"3D model upload failed after generation: {upload_exc}"
+                ) from upload_exc
         else:
             result_provider = result.provider
 
