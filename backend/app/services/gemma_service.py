@@ -286,15 +286,49 @@ def _last_assistant_message(messages: list[dict]) -> str:
     return ""
 
 
+def coerce_budget_amount(value) -> int:
+    """Normalize free-text or typed budgets to a non-negative int AED amount.
+
+    Summary-popup edits can persist non-numeric strings like "flexible".
+    Callers that do int(budget) would then crash after image generation.
+    """
+    if value is None or value == "":
+        return 0
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        amount = int(value)
+        return amount if amount > 0 else 0
+    if isinstance(value, str):
+        parsed = _parse_budget_amount(value)
+        if parsed is not None:
+            return parsed
+        try:
+            amount = int(float(value.replace(",", "").strip()))
+            return amount if amount > 0 else 0
+        except (TypeError, ValueError):
+            return 0
+    try:
+        amount = int(value)
+        return amount if amount > 0 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
 def _sanitize_requirements(requirements: dict) -> dict:
+    raw_budget = requirements.get("budget")
+    if isinstance(raw_budget, str):
+        # Keep unparseable text out of numeric comparisons / DB consumers.
+        requirements["budget"] = _parse_budget_amount(raw_budget)
+
     budget = requirements.get("budget")
     booth_size = requirements.get("booth_size") or ""
 
-    if budget is not None and booth_size:
+    if budget is not None and booth_size and isinstance(budget, (int, float)):
         size_digits = re.sub(r"[^0-9]", "", booth_size)
         if size_digits and budget == int(size_digits):
             requirements["budget"] = None
-        if budget < 500 and "x" in booth_size.lower():
+        elif budget < 500 and "x" in booth_size.lower():
             requirements["budget"] = None
 
     return requirements

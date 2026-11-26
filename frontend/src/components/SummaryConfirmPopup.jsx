@@ -22,6 +22,9 @@ function fromEditableValue(key, raw) {
     const digits = text.replace(/[^\d.]/g, "");
     const num = Number(digits);
     if (Number.isFinite(num) && digits) return num;
+    // Never persist free-text budgets like "flexible" — the API historically
+    // crashed on int(budget) after the image was already generated.
+    return null;
   }
   return text;
 }

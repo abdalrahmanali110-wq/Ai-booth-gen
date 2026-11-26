@@ -561,53 +561,12 @@ def run_generation_pipeline(session_id: str) -> dict[str, Any]:
             "prompt_used": prompt,
         }
     ).execute()
+    generated_image = image_response.data[0]
 
-    consultation_report = generate_consultation_report(requirements)
-    suppliers_data = (
-        consultation_report.get("web_companies") or []
-    ) + (consultation_report.get("stretch_companies") or [])
-    saved_suppliers = []
-
-    for supplier in suppliers_data:
-        supplier_response = supabase.table("supplier_recommendations").insert(
-            {
-                "booth_request_id": booth_id,
-                "company_name": supplier["name"],
-                "website_url": supplier.get("url"),
-                "location": requirements.get("location") or "Dubai",
-                "description": (
-                    f"{supplier.get('why_recommended') or supplier.get('snippet', '')} "
-                    f"{supplier.get('estimated_range', '')}".strip()
-                ),
-                "source": f"web-{supplier.get('tier', 'recommended')}",
-            }
-        ).execute()
-        saved_suppliers.append(supplier_response.data[0])
-
-    budget_analysis = consultation_report["budget_analysis"]
-    build_cost = (
-        budget_analysis["user_budget"]
-        if budget_analysis["user_budget"]
-        else budget_analysis["market_range_high"]
-    )
-    budget = calculate_budget(
-        [{"estimated_cost": build_cost}],
-        requirements["booth_size"],
-    )
-
-    proposal_text = consultation_report["markdown"]
-
-    proposal_response = supabase.table("project_proposals").insert(
-        {
-            "booth_request_id": booth_id,
-            "proposal_title": (
-                f"{requirements['event_name']} Exhibition Proposal"
-            ),
-            "proposal_summary": proposal_text,
-            "estimated_budget": budget["grand_total"],
-        }
-    ).execute()
-
+    # Persist the image result before consultation/proposal work. Those steps
+    # historically crashed on free-text budgets (e.g. "flexible") after the
+    # expensive image was already stored, leaving an orphaned booth_request and
+    # a 502 with no quota charge.
     try:
         supabase.table("chat_sessions").update(
             {
@@ -618,16 +577,87 @@ def run_generation_pipeline(session_id: str) -> dict[str, Any]:
     except Exception:
         pass
 
-    supabase.table("booth_requirements").update(
-        {"booth_request_id": booth_id}
-    ).eq("session_id", session_id).execute()
+    try:
+        supabase.table("booth_requirements").update(
+            {"booth_request_id": booth_id}
+        ).eq("session_id", session_id).execute()
+    except Exception:
+        pass
+
+    saved_suppliers: list[dict[str, Any]] = []
+    consultation_report: dict[str, Any] | None = None
+    budget: dict[str, Any] | None = None
+    proposal: dict[str, Any] | None = None
+
+    try:
+        consultation_report = generate_consultation_report(requirements)
+        suppliers_data = (
+            consultation_report.get("web_companies") or []
+        ) + (consultation_report.get("stretch_companies") or [])
+
+        for supplier in suppliers_data:
+            company_name = supplier.get("name")
+            if not company_name:
+                continue
+            try:
+                supplier_response = supabase.table(
+                    "supplier_recommendations"
+                ).insert(
+                    {
+                        "booth_request_id": booth_id,
+                        "company_name": company_name,
+                        "website_url": supplier.get("url"),
+                        "location": requirements.get("location") or "Dubai",
+                        "description": (
+                            f"{supplier.get('why_recommended') or supplier.get('snippet', '')} "
+                            f"{supplier.get('estimated_range', '')}".strip()
+                        ),
+                        "source": f"web-{supplier.get('tier', 'recommended')}",
+                    }
+                ).execute()
+                if supplier_response.data:
+                    saved_suppliers.append(supplier_response.data[0])
+            except Exception:
+                continue
+
+        budget_analysis = consultation_report["budget_analysis"]
+        build_cost = (
+            budget_analysis["user_budget"]
+            if budget_analysis["user_budget"]
+            else budget_analysis["market_range_high"]
+        )
+        budget = calculate_budget(
+            [{"estimated_cost": build_cost}],
+            requirements["booth_size"],
+        )
+
+        proposal_response = supabase.table("project_proposals").insert(
+            {
+                "booth_request_id": booth_id,
+                "proposal_title": (
+                    f"{requirements['event_name']} Exhibition Proposal"
+                ),
+                "proposal_summary": consultation_report["markdown"],
+                "estimated_budget": budget["grand_total"],
+            }
+        ).execute()
+        proposal = proposal_response.data[0] if proposal_response.data else None
+    except Exception:
+        # Image + session link already committed; return a usable result.
+        consultation_report = consultation_report or {
+            "markdown": "",
+            "budget_analysis": {"user_budget": 0},
+            "web_companies": [],
+            "stretch_companies": [],
+        }
+        budget = budget or calculate_budget([], requirements["booth_size"])
 
     return {
         "booth_request": booth_record,
-        "generated_image": image_response.data[0],
+        "generated_image": generated_image,
         "suppliers": saved_suppliers,
         "budget": budget,
-        "proposal": proposal_response.data[0],
+        "proposal": proposal,
         "consultation_report": consultation_report,
         "requirements": requirements,
     }

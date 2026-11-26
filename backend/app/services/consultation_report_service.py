@@ -2,6 +2,7 @@ import re
 from typing import Any
 
 from app.services.gemma_service import (
+    coerce_budget_amount,
     curate_supplier_recommendations,
     generate_booth_feature_analysis,
 )
@@ -85,7 +86,7 @@ def _vision_tier(requirements: dict[str, Any]) -> str:
 
 
 def analyze_budget(requirements: dict[str, Any]) -> dict[str, Any]:
-    user_budget = int(requirements.get("budget") or 0)
+    user_budget = coerce_budget_amount(requirements.get("budget"))
     width, depth, sqm = _parse_booth_size(requirements.get("booth_size", "6x6"))
     complexity = _complexity_score(requirements)
 

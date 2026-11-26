@@ -57,9 +57,17 @@ def _run_search(query: str, max_results: int = 6) -> list[dict[str, str]]:
         return []
 
 
+def _budget_as_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        # Summary edits may persist "flexible" / range text; search can proceed at 0.
+        return 0
+
+
 def search_exhibition_contractors(requirements: dict[str, Any]) -> list[dict[str, str]]:
     location = _normalize_location(requirements.get("location", "Dubai"))
-    budget = int(requirements.get("budget") or 0)
+    budget = _budget_as_int(requirements.get("budget"))
     booth_size = requirements.get("booth_size") or "6x6"
     industry = requirements.get("industry") or "exhibition"
 
