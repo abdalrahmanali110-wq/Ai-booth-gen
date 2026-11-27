@@ -43,6 +43,10 @@ def _parse_booth_size(booth_size: str) -> tuple[int, int, int]:
     if not match:
         return 6, 6, 36
     width, depth = int(match.group(1)), int(match.group(2))
+    # Zero/negative dimensions (e.g. summary edits like "0x0") would make
+    # analyze_budget divide by sqm=0 after image generation already succeeded.
+    if width <= 0 or depth <= 0:
+        return 6, 6, 36
     return width, depth, width * depth
 
 
@@ -94,7 +98,7 @@ def analyze_budget(requirements: dict[str, Any]) -> dict[str, Any]:
     market_high = int(MARKET_RATES["premium"][1] * sqm * complexity)
     vision = _vision_tier(requirements)
 
-    if user_budget > 0:
+    if user_budget > 0 and sqm > 0:
         budget_per_sqm = user_budget / sqm
         achievable_tier = _tier_from_budget_per_sqm(budget_per_sqm)
         low_rate, high_rate = MARKET_RATES[achievable_tier]
