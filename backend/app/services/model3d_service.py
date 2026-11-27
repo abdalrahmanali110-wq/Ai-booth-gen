@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -17,6 +19,15 @@ def _demo_model_url() -> str:
     return "/demo-booth.glb"
 
 
+def _safe_public_id(filename: str) -> str:
+    """Build a unique Cloudinary public_id that will not collide across jobs."""
+    stem = filename[:-4] if filename.lower().endswith(".glb") else filename
+    stem = re.sub(r"[^A-Za-z0-9_-]+", "-", (stem or "booth")).strip("-") or "booth"
+    # Full job ids can be long; keep a readable prefix and append entropy so
+    # overwrite can never replace another user's asset at the same URL.
+    return f"{stem[:80]}-{uuid.uuid4().hex}"
+
+
 def upload_model_bytes(model_bytes: bytes, filename: str = "booth.glb") -> str:
     import cloudinary.uploader
 
@@ -24,8 +35,8 @@ def upload_model_bytes(model_bytes: bytes, filename: str = "booth.glb") -> str:
         model_bytes,
         folder="ai-booth-generator/models3d",
         resource_type="raw",
-        public_id=filename.replace(".glb", ""),
-        overwrite=True,
+        public_id=_safe_public_id(filename),
+        overwrite=False,
         format="glb",
     )
     return result["secure_url"]
@@ -57,8 +68,9 @@ def create_job(
         return response.data[0]
     except Exception as exc:
         # Table may be missing — still return an in-memory job for MVP testing.
+        # Use a full unique id so Cloudinary uploads cannot collide on truncation.
         return {
-            "id": f"local-{session_id[:8]}",
+            "id": f"local-{session_id}-{uuid.uuid4().hex}",
             "user_id": user_id,
             "session_id": session_id,
             "source_image_url": source_image_url,
@@ -107,7 +119,9 @@ def process_job(job_id: str, job: dict[str, Any] | None = None) -> dict[str, Any
         try:
             model_url = upload_model_bytes(
                 result.model_bytes,
-                filename=f"booth-{str(job_id)[:8]}.glb",
+                # Pass the full job id — truncation previously mapped many jobs
+                # onto the same Cloudinary public_id with overwrite=True.
+                filename=f"booth-{job_id}.glb",
             )
         except Exception:
             # Cloudinary/raw upload can fail on serverless — use hosted demo GLB.
