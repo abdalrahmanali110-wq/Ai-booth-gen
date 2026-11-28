@@ -90,13 +90,31 @@ def process_job(job_id: str, job: dict[str, Any] | None = None) -> dict[str, Any
     if current.get("status") == "COMPLETED" and current.get("model_url"):
         return current
 
+    # Refuse to start a second paid Tripo run while one is already in flight.
+    if current.get("status") == "PROCESSING" and not ephemeral:
+        return current
+
     if not ephemeral:
         try:
-            supabase.table("model_3d_jobs").update(
-                {"status": "PROCESSING", "updated_at": _now()}
-            ).eq("id", job_id).execute()
+            # Atomic claim: only PENDING/FAILED rows may enter PROCESSING.
+            claimed = (
+                supabase.table("model_3d_jobs")
+                .update({"status": "PROCESSING", "updated_at": _now()})
+                .eq("id", job_id)
+                .in_("status", ["PENDING", "FAILED"])
+                .execute()
+            )
+            if not claimed.data:
+                latest = get_job(job_id) or current
+                return latest
+            current = claimed.data[0]
         except Exception:
-            pass
+            try:
+                supabase.table("model_3d_jobs").update(
+                    {"status": "PROCESSING", "updated_at": _now()}
+                ).eq("id", job_id).execute()
+            except Exception:
+                pass
 
     try:
         provider = get_model3d_provider()

@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Header, HTTPException
 
 from app.models.auth import ClaimSessionRequest, CreateModel3DRequest
-from app.services.auth_service import claim_session, create_lead, upsert_app_user
+from app.services.auth_service import (
+    claim_session,
+    create_lead,
+    require_authenticated_user,
+    upsert_app_user,
+)
 from app.services.model3d_service import (
     create_and_process_job,
     create_job,
@@ -10,6 +15,15 @@ from app.services.model3d_service import (
 )
 
 router = APIRouter()
+
+
+def _auth_user_from_header(authorization: str | None) -> dict:
+    try:
+        return require_authenticated_user(authorization)
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.post("/projects/{session_id}/claim")
@@ -103,17 +117,33 @@ def enqueue_model3d(
 
 
 @router.get("/models3d/{job_id}")
-def get_model3d_job(job_id: str):
+def get_model3d_job(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    auth_user = _auth_user_from_header(authorization)
     job = get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="3D job not found")
+    if job.get("user_id") and str(job["user_id"]) != str(auth_user["id"]):
+        raise HTTPException(status_code=403, detail="3D job does not belong to user")
     return {"success": True, "job": job}
 
 
 @router.post("/models3d/{job_id}/process")
-def process_model3d_job(job_id: str):
+def process_model3d_job(
+    job_id: str,
+    authorization: str | None = Header(default=None),
+):
+    auth_user = _auth_user_from_header(authorization)
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="3D job not found")
+    if job.get("user_id") and str(job["user_id"]) != str(auth_user["id"]):
+        raise HTTPException(status_code=403, detail="3D job does not belong to user")
+
     try:
-        job = process_job(job_id)
+        job = process_job(job_id, job=job)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:

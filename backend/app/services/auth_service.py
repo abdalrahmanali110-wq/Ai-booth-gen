@@ -2,8 +2,59 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.config import DEFAULT_USER_ID, SUPABASE_ANON_KEY, SUPABASE_URL
+import httpx
+
+from app.core.config import DEFAULT_USER_ID, SUPABASE_ANON_KEY, SUPABASE_KEY, SUPABASE_URL
 from app.core.database import supabase
+
+
+def extract_bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    scheme, _, value = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not value.strip():
+        return None
+    return value.strip()
+
+
+def verify_access_token(access_token: str) -> dict[str, Any]:
+    """Validate a Supabase user JWT and return the auth user payload."""
+    if not access_token or not str(access_token).strip():
+        raise PermissionError("Missing access token")
+
+    api_key = SUPABASE_ANON_KEY or SUPABASE_KEY
+    if not SUPABASE_URL or not api_key:
+        raise RuntimeError(
+            "Supabase Auth is not configured (SUPABASE_URL / anon key)."
+        )
+
+    try:
+        response = httpx.get(
+            f"{SUPABASE_URL}/auth/v1/user",
+            headers={
+                "apikey": api_key,
+                "Authorization": f"Bearer {access_token}",
+            },
+            timeout=30.0,
+        )
+    except Exception as exc:
+        raise RuntimeError(f"Auth user lookup failed: {exc}") from exc
+
+    body = response.json() if response.content else {}
+    if response.status_code >= 400:
+        message = body.get("msg") or body.get("message") or "Invalid or expired session"
+        raise PermissionError(message)
+
+    if not body.get("id"):
+        raise PermissionError("OAuth user is missing id")
+    return body
+
+
+def require_authenticated_user(authorization: str | None) -> dict[str, Any]:
+    token = extract_bearer_token(authorization)
+    if not token:
+        raise PermissionError("Sign in required. Missing Authorization Bearer token.")
+    return verify_access_token(token)
 
 
 def upsert_app_user(
