@@ -362,12 +362,14 @@ def send_message(
 
     if agent_result.get("should_generate"):
         try:
+            # Reserve the free slot before calling paid image APIs so parallel
+            # requests cannot bypass ANON_MAX_IMAGE_GENERATIONS.
             assert_can_generate(visitor_id=visitor["id"])
-            generation_result = run_generation_pipeline(data.session_id)
             record_image_attempt(
                 session_id=data.session_id,
                 visitor_id=visitor["id"],
             )
+            generation_result = run_generation_pipeline(data.session_id)
             quota = get_quota(visitor_id=visitor["id"])
             reply = (
                 "Your booth concept has been generated! "
@@ -437,8 +439,8 @@ def generate_from_session(
 
     try:
         assert_can_generate(visitor_id=visitor["id"])
-        result = run_generation_pipeline(session_id)
         record_image_attempt(session_id=session_id, visitor_id=visitor["id"])
+        result = run_generation_pipeline(session_id)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:

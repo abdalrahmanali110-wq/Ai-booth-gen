@@ -158,7 +158,33 @@ def regenerate_design(session_id: str) -> dict[str, Any]:
             raise ValueError("No compiled prompt available. Complete answers first.")
         prompt = compile_prompt(answers)
 
-    image_result = generate_booth_image(prompt)
+    # Reserve the regeneration slot before calling the paid image API so
+    # concurrent regenerate requests cannot exceed MAX_REGENERATIONS.
+    reserved = (
+        supabase.table("booth_designs")
+        .update(
+            {
+                "regenerate_count": count + 1,
+                "updated_at": _now_iso(),
+            }
+        )
+        .eq("id", session_id)
+        .eq("regenerate_count", count)
+        .execute()
+    )
+    if not reserved.data:
+        raise ValueError(
+            f"Regeneration limit reached ({MAX_REGENERATIONS} per session)."
+        )
+
+    try:
+        image_result = generate_booth_image(prompt)
+    except Exception:
+        # Roll back the reservation on provider failure.
+        supabase.table("booth_designs").update(
+            {"regenerate_count": count, "updated_at": _now_iso()}
+        ).eq("id", session_id).eq("regenerate_count", count + 1).execute()
+        raise
 
     response = (
         supabase.table("booth_designs")
@@ -167,7 +193,6 @@ def regenerate_design(session_id: str) -> dict[str, Any]:
                 "compiled_prompt": prompt,
                 "image_url": image_result["image_url"],
                 "image_provider": image_result.get("provider"),
-                "regenerate_count": count + 1,
                 "status": "completed",
                 "updated_at": _now_iso(),
             }
@@ -190,6 +215,10 @@ def save_lead(session_id: str, contact: dict[str, Any]) -> dict[str, Any]:
     session = get_design_session(session_id)
     if not session:
         raise ValueError("Session not found")
+
+    existing = session.get("contact") or {}
+    if (existing.get("email") or "").strip():
+        raise ValueError("Contact already saved for this session")
 
     name = (contact.get("name") or "").strip()
     email = (contact.get("email") or "").strip()
