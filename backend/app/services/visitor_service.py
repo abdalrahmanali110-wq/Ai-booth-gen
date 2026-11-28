@@ -79,6 +79,25 @@ def assert_can_generate(visitor_id: str | None = None, user_id: str | None = Non
     return quota
 
 
+def assert_reservation_within_cap(
+    visitor_id: str | None = None, user_id: str | None = None
+) -> dict[str, Any]:
+    """After recording an attempt, ensure parallel reserves did not exceed the cap.
+
+    Callers should record_image_attempt() first, then call this before paid work.
+    If two requests race past assert_can_generate, at most one should proceed.
+    """
+    quota = get_quota(visitor_id=visitor_id, user_id=user_id)
+    if quota.get("unlimited"):
+        return quota
+    if quota["used"] > quota["max"]:
+        raise PermissionError(
+            f"Free generation limit reached ({quota['max']} images). "
+            "Sign in with Google anytime to save your project and unlock 3D conversion."
+        )
+    return quota
+
+
 def record_image_attempt(
     *,
     session_id: str,

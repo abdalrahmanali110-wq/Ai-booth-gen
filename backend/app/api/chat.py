@@ -18,6 +18,7 @@ from app.services.agent_service import (
 )
 from app.services.visitor_service import (
     assert_can_generate,
+    assert_reservation_within_cap,
     get_or_create_visitor,
     get_quota,
     record_image_attempt,
@@ -369,6 +370,7 @@ def send_message(
                 session_id=data.session_id,
                 visitor_id=visitor["id"],
             )
+            assert_reservation_within_cap(visitor_id=visitor["id"])
             generation_result = run_generation_pipeline(data.session_id)
             quota = get_quota(visitor_id=visitor["id"])
             reply = (
@@ -440,6 +442,7 @@ def generate_from_session(
     try:
         assert_can_generate(visitor_id=visitor["id"])
         record_image_attempt(session_id=session_id, visitor_id=visitor["id"])
+        assert_reservation_within_cap(visitor_id=visitor["id"])
         result = run_generation_pipeline(session_id)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
