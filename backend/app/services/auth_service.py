@@ -20,6 +20,29 @@ def upsert_app_user(
         .eq("auth_user_id", auth_user_id)
         .execute()
     )
+
+    if existing.data:
+        # Never null-out profile fields the caller omitted (e.g. Google re-login
+        # sends email only — phone/company must survive).
+        update_payload: dict[str, Any] = {
+            "auth_user_id": auth_user_id,
+            "email": email,
+        }
+        if name is not None:
+            update_payload["full_name"] = name
+        if phone is not None:
+            update_payload["phone"] = phone
+        if company is not None:
+            update_payload["company"] = company
+            update_payload["company_name"] = company
+        response = (
+            supabase.table("users")
+            .update(update_payload)
+            .eq("auth_user_id", auth_user_id)
+            .execute()
+        )
+        return response.data[0]
+
     payload = {
         "auth_user_id": auth_user_id,
         "email": email,
@@ -28,15 +51,6 @@ def upsert_app_user(
         "company": company,
         "company_name": company,
     }
-
-    if existing.data:
-        response = (
-            supabase.table("users")
-            .update(payload)
-            .eq("auth_user_id", auth_user_id)
-            .execute()
-        )
-        return response.data[0]
 
     # users.id historically required; use auth uuid as primary key when possible
     payload["id"] = auth_user_id
